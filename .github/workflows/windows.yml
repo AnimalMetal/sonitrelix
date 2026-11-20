@@ -1,0 +1,55 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install stable Rust
+        run: |
+          rustup update stable --no-self-update
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup default stable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup component add rustfmt clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test without audio hardware
+        run: cargo test --workspace --locked
+      - name: Build Windows executable
+        run: cargo build --release --workspace --locked
+      - name: Prepare portable development build
+        run: |
+          New-Item -ItemType Directory -Path dist/Sonitrelix -Force | Out-Null
+          Copy-Item -LiteralPath target/release/Sonitrelix.exe -Destination dist/Sonitrelix
+          Copy-Item -LiteralPath LICENSE,THIRD_PARTY_NOTICES.md,README.md,CHANGELOG.md,BUILDING.md,Cargo.lock -Destination dist/Sonitrelix
+          Copy-Item -LiteralPath third-party-licenses,docs -Destination dist/Sonitrelix -Recurse
+          Compress-Archive -Path dist/Sonitrelix -DestinationPath dist/Sonitrelix-windows-x64.zip
+          $hash = (Get-FileHash -LiteralPath dist/Sonitrelix-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Sonitrelix-windows-x64.zip" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Sonitrelix-windows-x64
+          path: |
+            dist/Sonitrelix-windows-x64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error

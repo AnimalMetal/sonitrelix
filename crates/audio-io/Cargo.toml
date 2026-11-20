@@ -1,0 +1,5 @@
+[package]
+name = "sonitrelix-audio-io"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
