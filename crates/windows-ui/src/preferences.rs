@@ -1,19 +1,20 @@
 //! Native tabbed Windows Preferences. Workers own discovery and disk writes.
 use super::{load_strings, w::*};
 use sonitrelix_devices::{Catalog, Device};
-use sonitrelix_settings::{BUFFER_SIZES, SAMPLE_RATES, Settings, Store};
+use sonitrelix_settings::{BITRATES, BUFFER_SIZES, EXPORT_RATES, SAMPLE_RATES, Settings, Store};
 use std::{
     ptr::{null, null_mut},
     sync::mpsc::{self, Receiver, TryRecvError},
 };
 
 pub(super) const SETTINGS_APPLIED: u32 = 0x8001;
-const PAGE_KEYS: [&str; 5] = [
+const PAGE_KEYS: [&str; 6] = [
     "pref_general",
     "pref_devices",
     "pref_recording",
     "pref_keyboard",
     "pref_accessibility",
+    "pref_export",
 ];
 const STATUS: i32 = 9009;
 const APPLY_ID: i32 = 0x3021;
@@ -30,7 +31,7 @@ struct Context {
     store: Store,
     draft: Settings,
     strings: serde_json::Value,
-    pages: [HWND; 5],
+    pages: [HWND; 6],
     labels: Vec<(HWND, &'static str)>,
     inputs: Vec<Choice>,
     outputs: Vec<Choice>,
@@ -47,7 +48,7 @@ pub(super) struct Dialog {
     // These allocations must outlive the modeless property sheet.
     _templates: Vec<Vec<u32>>,
     _titles: Vec<Vec<u16>>,
-    _init: Box<[PageInit; 5]>,
+    _init: Box<[PageInit; 6]>,
     _pages: Vec<PROPSHEETPAGEW>,
     focus_id: i32,
 }
@@ -154,7 +155,8 @@ impl Context {
                         (10, 96, 315, 19),
                     );
                     self.labels.push((c, "pref_defaults"));
-                    self.note(h, "pref_general_help", 126, 61);
+                    self.check(h, "pref_automatic_updates", 1003, 126);
+                    self.note(h, "pref_general_help", 152, 35);
                 }
                 1 => {
                     self.field(h, "pref_input", 2001, 10, true);
@@ -175,17 +177,33 @@ impl Context {
                     self.field(h, "pref_buffer", 3002, 52, true);
                     self.field(h, "pref_offset", 3003, 94, false);
                     self.check(h, "pref_monitoring", 3004, 133);
+                    EnableWindow(GetDlgItem(h, 3004), 0);
                     self.note(h, "pref_recording_help", 158, 29);
                 }
                 3 => {
                     self.field(h, "pref_step", 4001, 10, false);
                     self.field(h, "pref_large_step", 4002, 52, false);
-                    self.note(h, "pref_keyboard_help", 94, 93);
+                    let c = self.control(
+                        h,
+                        "BUTTON",
+                        &self.t("keys_button"),
+                        4003,
+                        0x10000,
+                        (10, 94, 315, 24),
+                    );
+                    self.labels.push((c, "keys_button"));
+                    self.note(h, "pref_keyboard_help", 126, 61);
                 }
                 4 => {
                     self.check(h, "pref_detailed_time", 5001, 10);
                     self.check(h, "pref_focus_status", 5002, 38);
                     self.note(h, "pref_accessibility_help", 76, 111);
+                }
+                5 => {
+                    self.field(h, "pref_export_rate", 6001, 10, true);
+                    self.field(h, "pref_export_channels", 6002, 52, true);
+                    self.field(h, "pref_export_bitrate", 6003, 94, true);
+                    self.note(h, "pref_export_help", 138, 49);
                 }
                 _ => (),
             }
@@ -212,6 +230,12 @@ impl Context {
             SetWindowLongPtrW(h, 16, 0);
             match index {
                 0 => {
+                    SendMessageW(
+                        GetDlgItem(h, 1003),
+                        0xf1,
+                        usize::from(self.draft.general.automatic_updates),
+                        0,
+                    );
                     fill(
                         h,
                         1001,
@@ -314,6 +338,45 @@ impl Context {
                         0,
                     );
                 }
+                5 => {
+                    let rates: Vec<_> = EXPORT_RATES
+                        .iter()
+                        .map(|r| {
+                            if *r == 0 {
+                                self.t("pref_export_auto")
+                            } else {
+                                format!("{r} Hz")
+                            }
+                        })
+                        .collect();
+                    fill(
+                        h,
+                        6001,
+                        &rates,
+                        EXPORT_RATES
+                            .iter()
+                            .position(|r| *r == self.draft.export.sample_rate)
+                            .unwrap_or(0),
+                    );
+                    fill(
+                        h,
+                        6002,
+                        &[self.t("audio_mono"), self.t("audio_stereo")],
+                        usize::from(self.draft.export.channels == 2),
+                    );
+                    fill(
+                        h,
+                        6003,
+                        &BITRATES
+                            .iter()
+                            .map(|b| format!("{b} kbps"))
+                            .collect::<Vec<_>>(),
+                        BITRATES
+                            .iter()
+                            .position(|b| *b == self.draft.export.mp3_bitrate)
+                            .unwrap_or(4),
+                    );
+                }
                 _ => (),
             }
             SetWindowLongPtrW(h, 16, init);
@@ -321,6 +384,21 @@ impl Context {
     }
     unsafe fn set_status(&self, key: &str, detail: &str) {
         unsafe {
+            if matches!(
+                key,
+                "pref_worker_error" | "pref_devices_error" | "pref_save_error" | "error"
+            ) && let Some(data) = self.store.path().parent()
+            {
+                super::diagnostics::write(
+                    data,
+                    key,
+                    if detail.is_empty() {
+                        self.t(key)
+                    } else {
+                        detail.to_owned()
+                    },
+                );
+            }
             let text = if detail.is_empty() {
                 self.t(key)
             } else {
@@ -371,6 +449,8 @@ impl Context {
     unsafe fn read_all(&mut self) -> Result<Settings, (usize, i32, &'static str)> {
         unsafe {
             let mut next = self.draft.clone();
+            next.general.automatic_updates =
+                SendMessageW(GetDlgItem(self.pages[0], 1003), 0xf0, 0, 0) == 1;
             next.general.language = if selected(self.pages[0], 1001) == 1 {
                 "es"
             } else {
@@ -408,8 +488,24 @@ impl Context {
                 SendMessageW(GetDlgItem(self.pages[4], 5001), 0xf0, 0, 0) == 1;
             next.accessibility.focus_status =
                 SendMessageW(GetDlgItem(self.pages[4], 5002), 0xf0, 0, 0) == 1;
+            next.export.sample_rate = *EXPORT_RATES.get(selected(self.pages[5], 6001)).ok_or((
+                5,
+                6001,
+                "pref_export_error",
+            ))?;
+            next.export.channels = if selected(self.pages[5], 6002) == 0 {
+                1
+            } else {
+                2
+            };
+            next.export.mp3_bitrate = *BITRATES.get(selected(self.pages[5], 6003)).ok_or((
+                5,
+                6003,
+                "pref_export_error",
+            ))?;
             match next.validate() {
                 Ok(()) => Ok(next),
+                Err("export") => Err((5, 6001, "pref_export_error")),
                 Err("offset") => Err((2, 3003, "pref_offset_error")),
                 Err("step") => Err((3, 4001, "pref_step_error")),
                 Err("large_step") => Err((3, 4002, "pref_large_step_error")),
@@ -506,7 +602,7 @@ impl Context {
                                 self.draft = self.store.settings.clone();
                                 self.applied = Some(self.store.clone());
                                 self.localize();
-                                for index in 0..5 {
+                                for index in 0..6 {
                                     self.populate(index);
                                 }
                                 self.set_status("pref_saved", "");
@@ -590,6 +686,22 @@ unsafe extern "system" fn page_proc(page: HWND, message: u32, w: usize, l: isize
             }
             0x111 => {
                 let id = w & 0xffff;
+                if id == 4003 && w >> 16 == 0 && (*ctx).saving.is_none() {
+                    let mut draft = (*ctx).draft.clone();
+                    let strings = (*ctx).strings.clone();
+                    let sheet = (*ctx).sheet;
+                    match super::shortcut_config::edit(sheet, strings, &mut draft) {
+                        Ok(true) => {
+                            (*ctx).draft.extra = draft.extra;
+                            SendMessageW(sheet, PSM_CHANGED, page as usize, 0);
+                        }
+                        Ok(false) => (),
+                        Err(e) => {
+                            (*ctx).set_status("error", &e);
+                        }
+                    }
+                    return 1;
+                }
                 if id == 2100 && w >> 16 == 0 {
                     (*ctx).discover();
                     return 1;
@@ -607,7 +719,7 @@ unsafe extern "system" fn page_proc(page: HWND, message: u32, w: usize, l: isize
                     if yes {
                         let defaults = (*ctx).draft.defaults_preserving_unknown();
                         (*ctx).draft = defaults;
-                        for i in 0..5 {
+                        for i in 0..6 {
                             (*ctx).populate(i);
                         }
                         (*ctx).set_status("pref_defaults_pending", "");
@@ -667,7 +779,7 @@ impl Dialog {
                 draft: store.settings.clone(),
                 strings: load_strings(store.settings.general.language == "es"),
                 store,
-                pages: [null_mut(); 5],
+                pages: [null_mut(); 6],
                 labels: vec![],
                 inputs: vec![],
                 outputs: vec![],
@@ -679,13 +791,13 @@ impl Dialog {
                 allow_close: false,
             });
             let context_ptr = &mut *context as *mut Context;
-            let init = Box::new(std::array::from_fn::<_, 5, _>(|index| PageInit {
+            let init = Box::new(std::array::from_fn::<_, 6, _>(|index| PageInit {
                 context: context_ptr,
                 index,
             }));
-            let templates: Vec<_> = (0..5).map(|_| template()).collect();
+            let templates: Vec<_> = (0..6).map(|_| template()).collect();
             let titles: Vec<_> = PAGE_KEYS.iter().map(|key| wide(&context.t(key))).collect();
-            let pages: Vec<_> = (0..5)
+            let pages: Vec<_> = (0..6)
                 .map(|i| PROPSHEETPAGEW {
                     size: std::mem::size_of::<PROPSHEETPAGEW>() as u32,
                     flags: 1 | 8 | 0x400,
@@ -707,7 +819,7 @@ impl Dialog {
                 instance: GetModuleHandleW(null()),
                 icon: null_mut(),
                 caption: caption.as_ptr(),
-                count: 5,
+                count: 6,
                 start: 0,
                 pages: pages.as_ptr(),
                 callback: 0,
@@ -879,11 +991,12 @@ mod tests {
             ShowWindow(dialog.hwnd, 0);
             assert!(dialog.context.pages.iter().all(|p| !p.is_null()));
             for (index, ids) in [
-                (0, vec![1001, 1002, 1100]),
+                (0, vec![1001, 1002, 1003, 1100]),
                 (1, vec![2001, 2002, 2100]),
                 (2, vec![3001, 3002, 3003, 3004]),
-                (3, vec![4001, 4002]),
+                (3, vec![4001, 4002, 4003]),
                 (4, vec![5001, 5002]),
+                (5, vec![6001, 6002, 6003]),
             ] {
                 for id in ids {
                     assert!(

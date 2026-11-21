@@ -30,7 +30,7 @@ struct Vtable {
     count: usize,
     child: usize,
     name: unsafe extern "system" fn(*mut c_void, Variant, *mut *mut u16) -> i32,
-    value: usize,
+    value: unsafe extern "system" fn(*mut c_void, Variant, *mut *mut u16) -> i32,
     description: usize,
     role: unsafe extern "system" fn(*mut c_void, Variant, *mut Variant) -> i32,
 }
@@ -69,6 +69,13 @@ unsafe extern "system" {
     fn SysFreeString(text: *mut u16);
 }
 pub(super) unsafe fn name_and_role(hwnd: HWND) -> (String, u32) {
+    let (name, role, _) = unsafe { inspect(hwnd, false) };
+    (name, role)
+}
+pub(super) unsafe fn name_role_value(hwnd: HWND) -> (String, u32, String) {
+    unsafe { inspect(hwnd, true) }
+}
+unsafe fn inspect(hwnd: HWND, read_value: bool) -> (String, u32, String) {
     unsafe {
         let initialized = CoInitializeEx(null_mut(), 2);
         assert!(initialized >= 0 || initialized as u32 == 0x80010106);
@@ -101,6 +108,18 @@ pub(super) unsafe fn name_and_role(hwnd: HWND) -> (String, u32) {
         };
         assert!((v.role)(object.0, child(), &mut role) >= 0);
         assert_eq!(role.vt, 3);
-        (label, role.data[0] as u32)
+        let mut value = String::new();
+        if read_value {
+            let mut text = null_mut();
+            assert!((v.value)(object.0, child(), &mut text) >= 0);
+            if !text.is_null() {
+                value = String::from_utf16_lossy(std::slice::from_raw_parts(
+                    text,
+                    SysStringLen(text) as usize,
+                ));
+            }
+            SysFreeString(text);
+        }
+        (label, role.data[0] as u32, value)
     }
 }

@@ -1,28 +1,11 @@
-# GitHub publishing
+# GitHub publication
 
-Repository: https://github.com/AnimalMetal/sonitrelix
+The [Sonitrelix repository](https://github.com/AnimalMetal/sonitrelix) runs formatting, Clippy, tests and Windows builds on main and release tags. The CI ZIP is a development artifact. The release owner prepares and publishes the official ZIP with FFmpeg and the signed update manifest.
 
-Source belongs in this independent repository, not its parent folder's repository. Build output, portable data, recordings under data/, distribution output and private keys are excluded by .gitignore. Review staged changes before committing. Do not add user recordings or credentials.
+1. Check the workspace version, review the actual files going into Git, and run the checks in BUILDING.md.
+2. Use a build directory with a non-personal path for native OpenSSL. Build the release executable, and audit its embedded strings for local paths before making it public.
+3. Build FFmpeg as described in FFMPEG_BUILD.md and run the FFmpeg integration tests from VALIDATION.md. Run `tools/package.ps1 -FFmpegBuild target/ffmpeg-release` to produce the portable ZIP and corresponding source ZIP.
+4. Sign the exact executable in the portable ZIP as described in UPDATES.md. Verify the signature, package contents, and SHA-256 checksums before publishing.
+5. Push the reviewed commit and tag it `v<version>`. Create a draft GitHub release and attach the portable ZIP, corresponding source ZIP, update executable, update manifest and checksums. Verify the draft assets before publishing.
 
-The Windows build workflow runs formatting, Clippy, hardware-independent tests and a release build on main pushes, pull requests, version tags and manual dispatch. It uploads a portable development ZIP and SHA-256 checksum as an Actions artifact. It includes dependency notices and user documentation. Real-device and NVDA/JAWS tests remain manual. The workflow itself needs its first successful GitHub run; local builds do not prove hosted CI has passed.
-
-This workflow does not publish a GitHub Release or enable in-app updates. Future update distribution should use versioned GitHub Releases, with a signed update manifest, hash verification, safe installation and preservation of data/. Checksums alone do not authenticate an update. No signing key is stored in this repository.
-
-## Finish the initial push from PowerShell
-
-Run from the Sonitrelix folder in a normal PowerShell window if the coding environment cannot write Git metadata or reach GitHub:
-
-```powershell
-# Run these commands from the repository root.
-git remote add origin https://github.com/AnimalMetal/sonitrelix.git
-git add -- .github .gitignore BUILDING.md CHANGELOG.md CONTRIBUTING.md Cargo.lock Cargo.toml LICENSE README.md THIRD_PARTY_NOTICES.md crates docs resources third-party-licenses
-git diff --cached --stat
-git commit -m "Initial Sonitrelix 0.4.0 development build"
-git push -u origin main
-```
-
-If origin already exists, check git remote -v rather than adding it again. Git Credential Manager may request GitHub sign-in. If the remote has existing commits, do not force-push: fetch and review its history before reconciling. An authentication prompt or a rejected push does not mean the upload succeeded.
-
-## Español
-
-El flujo de GitHub comprueba el código, ejecuta pruebas sin hardware y genera un ZIP portable con licencias y suma SHA-256. Falta verificar su primera ejecución en GitHub. No publica versiones ni activa actualizaciones automáticas todavía. Conserve fuera del repositorio grabaciones, datos y claves privadas. No fuerce un envío si el repositorio remoto ya contiene trabajo.
+Never stage or upload `data/`, recordings, settings, logs, or the private signing key. The embedded verification key is public.

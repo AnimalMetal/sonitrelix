@@ -1,10 +1,10 @@
-# Project format v3
+# Project format v4
 
-UTF-8 JSON with a .sonitrelix extension. Versions 1/2 migrate in memory; subsequent saves write version 3, which older builds cannot read. No source file is rewritten.
+UTF-8 JSON with a .sonitrelix extension. Versions 1/2/3 migrate in memory; subsequent saves write version 4, which older builds cannot read. No source file is rewritten.
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "sample_rate": 48000,
   "tracks": [{
     "name": "Vocals", "mute": false, "solo": false, "armed": true,
@@ -24,6 +24,7 @@ Track clips are consecutive ordered regions in sample frames; timeline position 
 
 Project rate is 8000–384000; current tracks/decoder/capture are restricted to 8000–192000 Hz, mono/stereo. Names must not be blank; gain finite >=0; pan finite -1 to +1. Source PCM bits 8/16/24/32 or float32, absolute paths, bounded RIFF frame count. Invalid values, out-of-range slices, overflow, more than 100000 clips per track, unknown fields and unknown versions are rejected. Position/selection and undo history are view state, not saved.
 
-Mute blocks selected-track preview; arm enables recording. Solo/gain/pan are persisted for a future mixer. Referenced WAV headers are rechecked when playback opens them; keep their files unchanged and in place. Save As retains absolute paths. Source contents are not embedded or hashed. Missing files produce an error. Recordings are assets in data/recordings; deleting or undoing a track never deletes them.
+Mute/solo/gain/pan affect the mix; arm selects a recording target. Referenced WAV headers are rechecked when playback opens them; keep their files unchanged and in place. Save As retains absolute paths. Source contents are not embedded or hashed. Missing files produce an error. Recordings are assets in data/recordings; deleting or undoing a track never deletes them.
 
-Project saves require .sonitrelix and reject a destination resolving to a referenced source. Save writes a sibling exclusive temporary file, flushes and uses Windows MoveFileExW replace-existing/write-through. Failure preserves the existing destination. Stale temporary files cause an error rather than silent deletion. Network shares/power-loss guarantees remain unverified. No project autosave/recovery journal exists. Recording WAV header checkpoints are separate and do not implement full project recovery.
+Project saves require .sonitrelix and reject a destination resolving to a referenced source. Save writes a sibling exclusive temporary file, flushes and uses Windows MoveFileExW replace-existing/write-through. Failure preserves the existing destination. Stale temporary files cause an error rather than silent deletion. Network shares/power-loss guarantees remain unverified. Dirty metadata is checkpointed every 30 seconds; startup offers recovery from an exited instance. Recording WAV header checkpoints are separate and do not implement full project recovery.
+Version 4 adds optional original_sources: an array of absolute original compressed-source paths, protected against save/export overwrite. Version 3 upgrades without changing clips. Paths remain references, not embedded assets.

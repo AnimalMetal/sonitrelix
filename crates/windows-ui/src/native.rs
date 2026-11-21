@@ -1,18 +1,36 @@
 #[cfg(test)]
 #[path = "accessibility_tests.rs"]
 mod accessibility_tests;
+#[path = "announcement.rs"]
+mod announcement;
+#[path = "diagnostics.rs"]
+mod diagnostics;
 #[path = "editing_ui.rs"]
 mod editing_ui;
+#[path = "effects_ui.rs"]
+mod effects_ui;
+#[path = "export_ui.rs"]
+mod export_ui;
+#[path = "forms.rs"]
+mod forms;
 #[path = "help.rs"]
 mod help;
+#[path = "maintenance.rs"]
+mod maintenance;
 #[path = "playback.rs"]
 mod playback;
 #[path = "preferences.rs"]
 mod preferences;
 #[path = "recording_ui.rs"]
 mod recording_ui;
+#[path = "shortcut_config.rs"]
+mod shortcut_config;
 #[path = "shortcuts.rs"]
 mod shortcuts;
+#[path = "slider.rs"]
+mod slider;
+#[path = "updates.rs"]
+mod updates;
 #[path = "win32.rs"]
 mod w;
 use editing_ui::*;
@@ -38,12 +56,14 @@ const RENAME: usize = 203;
 const MUTE: usize = 204;
 const SOLO: usize = 205;
 const ARM: usize = 206;
+const LEVELS: usize = 207;
 const UNDO: usize = 301;
 const REDO: usize = 302;
 const PREFERENCES: usize = 404;
 const HELP: usize = 501;
 const ABOUT: usize = 502;
 const CHANGELOG: usize = 503;
+const LICENSES: usize = 507;
 const APPLY: usize = 601;
 struct App {
     hwnd: HWND,
@@ -53,6 +73,7 @@ struct App {
     undo: Vec<History>,
     redo: Vec<History>,
     editor: Editor,
+    pending_track_row: std::cell::Cell<Option<usize>>,
     strings: serde_json::Value,
     es: bool,
     verbose: bool,
@@ -68,6 +89,9 @@ struct App {
     recording: Option<recording_ui::Recording>,
     recording_close_pending: bool,
     help: Option<help::Viewer>,
+    updates: updates::Checker,
+    exporter: export_ui::Exporter,
+    maintenance: maintenance::Maintenance,
 }
 impl App {
     fn t(&self, key: &str) -> String {
@@ -91,7 +115,17 @@ impl App {
             );
         }
     }
+    #[track_caller]
+    fn log_error(&self, operation: &str, detail: impl std::fmt::Display) {
+        diagnostics::write(&self.data, operation, detail);
+    }
+    #[track_caller]
     fn error(&self, e: impl std::fmt::Display) {
+        self.error_in("application", e);
+    }
+    #[track_caller]
+    fn error_in(&self, operation: &str, e: impl std::fmt::Display) {
+        self.log_error(operation, &e);
         self.log(&format!("error: {e}"));
         unsafe {
             self.modal.set(true);
@@ -188,9 +222,12 @@ impl App {
                     vec![
                         ("new", NEW),
                         ("open", OPEN),
+                        ("recent_menu", maintenance::RECENT),
                         ("import_wav", IMPORT),
                         ("save", SAVE),
                         ("save_as", SAVE_AS),
+                        ("export_audio", export_ui::EXPORT),
+                        ("export_selection", export_ui::EXPORT_SELECTION),
                         ("exit", EXIT),
                     ],
                 ),
@@ -209,6 +246,8 @@ impl App {
                         ("silence", SILENCE),
                         ("insert_silence", INSERT_SILENCE),
                         ("read_selection", READ_SELECTION),
+                        ("selection_mark_start_menu", MARK_START),
+                        ("selection_mark_end_menu", MARK_END),
                     ],
                 ),
                 (
@@ -216,6 +255,7 @@ impl App {
                     vec![
                         ("new_track", ADD_EMPTY),
                         ("rename", RENAME_FOCUS),
+                        ("track_levels", LEVELS),
                         ("duplicate_track", DUPLICATE),
                         ("move_track_up", MOVE_UP),
                         ("move_track_down", MOVE_DOWN),
@@ -238,13 +278,41 @@ impl App {
                     ],
                 ),
                 ("tools", vec![("preferences", PREFERENCES)]),
+                ("effects_menu", vec![("effects_open", effects_ui::EFFECTS)]),
                 (
                     "help_menu",
-                    vec![("help", HELP), ("changelog", CHANGELOG), ("about", ABOUT)],
+                    vec![
+                        ("help", HELP),
+                        ("check_updates", updates::CHECK),
+                        ("changelog", CHANGELOG),
+                        ("about", ABOUT),
+                        ("licenses", LICENSES),
+                    ],
                 ),
             ] {
                 let sub = CreatePopupMenu();
                 for (label, id) in items {
+                    if id == maintenance::RECENT {
+                        let recent = CreatePopupMenu();
+                        if self.maintenance.recent.is_empty() {
+                            AppendMenuW(recent, 1, 0, wide(&self.t("recent_empty")).as_ptr());
+                        }
+                        for (i, path) in self.maintenance.recent.iter().enumerate() {
+                            AppendMenuW(
+                                recent,
+                                0,
+                                maintenance::FIRST + i,
+                                wide(&format!(
+                                    "&{} {}",
+                                    (i + 1) % 10,
+                                    path.display().to_string().replace('&', "&&")
+                                ))
+                                .as_ptr(),
+                            );
+                        }
+                        AppendMenuW(sub, 0x10, recent as usize, wide(&self.t(label)).as_ptr());
+                        continue;
+                    }
                     AppendMenuW(sub, 0, id, wide(&self.t(label)).as_ptr());
                 }
                 AppendMenuW(menu, 0x10, sub as usize, wide(&self.t(key)).as_ptr());
@@ -260,32 +328,128 @@ impl App {
             SetFocus(GetDlgItem(self.hwnd, 11));
         }
     }
+    fn track_row(&self, i: usize, t: &sonitrelix_session::Track) -> String {
+        let mut row = format!(
+            "{} {}, {}, {}, {}, {}",
+            self.t("track_word"),
+            i + 1,
+            t.name,
+            self.t(if t.mute { "muted" } else { "unmuted" }),
+            self.t(if t.solo { "solo_on" } else { "solo_off" }),
+            self.t(if t.armed { "armed" } else { "unarmed" })
+        );
+        if !t.clips.is_empty() {
+            row.push_str(&format!(
+                ", {}, {}",
+                self.t(if t.channels == 1 {
+                    "audio_mono"
+                } else {
+                    "audio_stereo"
+                }),
+                format_time(playback::track_duration(t))
+            ));
+        }
+        row.push_str(&format!(
+            ", {} {:.1} dB, {} {:.0}%",
+            self.t("level_volume"),
+            20. * t.gain.max(0.000001).log10(),
+            self.t("level_balance"),
+            t.pan * 100.
+        ));
+        row
+    }
+    unsafe fn flush_track_row(&self, keep_selected: bool) {
+        unsafe {
+            let Some(index) = self.pending_track_row.get() else {
+                return;
+            };
+            let list = GetDlgItem(self.hwnd, 11);
+            let selected = SendMessageW(list, 0x188, 0, 0);
+            if keep_selected && selected == index as isize && GetFocus() == list {
+                return;
+            }
+            self.pending_track_row.set(None);
+            if let Some(track) = self.project.tracks.get(index) {
+                let top = SendMessageW(list, 0x18e, 0, 0);
+                let row = wide(&self.track_row(index, track));
+                if SendMessageW(list, 0x181, index + 1, row.as_ptr() as isize) >= 0 {
+                    SendMessageW(list, 0x182, index, 0);
+                    if selected == index as isize {
+                        SendMessageW(list, 0x186, index, 0);
+                    }
+                    if top >= 0 {
+                        SendMessageW(list, 0x197, top as usize, 0);
+                    }
+                }
+            }
+        }
+    }
+    unsafe fn toggle_track_state(&mut self, id: usize) {
+        unsafe {
+            let Some(index) = self.selected_track() else {
+                return;
+            };
+            self.checkpoint();
+            let track = &mut self.project.tracks[index];
+            let state = match id {
+                MUTE => {
+                    track.mute ^= true;
+                    if track.mute { "muted" } else { "unmuted" }
+                }
+                SOLO => {
+                    track.solo ^= true;
+                    if track.solo { "solo_on" } else { "solo_off" }
+                }
+                _ => {
+                    track.armed ^= true;
+                    if track.armed { "armed" } else { "unarmed" }
+                }
+            };
+            if id != ARM {
+                self.update_playback_mix();
+            }
+            self.pending_track_row.set(Some(index));
+            self.flush_track_row(true);
+            self.refresh_title();
+            let mut message = self.t(state);
+            if id == SOLO && self.project.tracks[index].solo {
+                let track = &self.project.tracks[index];
+                if track.mute || track.clips.is_empty() {
+                    let reason = if track.mute {
+                        "solo_muted_detail"
+                    } else {
+                        "solo_empty_detail"
+                    };
+                    message.push_str(&format!(". {}", self.t(reason)));
+                } else {
+                    let count = self
+                        .project
+                        .tracks
+                        .iter()
+                        .zip(sonitrelix_mixer::audible_tracks(&self.project))
+                        .filter(|(track, audible)| track.solo && *audible)
+                        .count();
+                    if count > 1 {
+                        message.push_str(&format!(
+                            ". {}",
+                            self.t("solo_multiple_detail")
+                                .replace("{count}", &count.to_string())
+                        ));
+                    }
+                }
+            }
+            self.status(&message);
+            announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+        }
+    }
     unsafe fn refresh(&self) {
         unsafe {
             let list = GetDlgItem(self.hwnd, 11);
             let selected = SendMessageW(list, 0x188, 0, 0);
+            self.pending_track_row.set(None);
             SendMessageW(list, 0x184, 0, 0);
             for (i, t) in self.project.tracks.iter().enumerate() {
-                let mut row = format!(
-                    "{} {}, {}, {}, {}, {}",
-                    self.t("track_word"),
-                    i + 1,
-                    t.name,
-                    self.t(if t.mute { "muted" } else { "unmuted" }),
-                    self.t(if t.solo { "solo_on" } else { "solo_off" }),
-                    self.t(if t.armed { "armed" } else { "unarmed" })
-                );
-                if !t.clips.is_empty() {
-                    row.push_str(&format!(
-                        ", {}, {}",
-                        self.t(if t.channels == 1 {
-                            "audio_mono"
-                        } else {
-                            "audio_stereo"
-                        }),
-                        format_time(playback::track_duration(t))
-                    ));
-                }
+                let row = self.track_row(i, t);
                 SendMessageW(list, 0x180, 0, wide(&row).as_ptr() as isize);
             }
             if !self.project.tracks.is_empty() {
@@ -296,6 +460,12 @@ impl App {
                     0,
                 );
             }
+            self.refresh_title();
+            self.refresh_clips();
+        }
+    }
+    unsafe fn refresh_title(&self) {
+        unsafe {
             let title = format!(
                 "{}{} — Sonitrelix",
                 self.path
@@ -306,7 +476,6 @@ impl App {
                 if self.dirty { " *" } else { "" }
             );
             SetWindowTextW(self.hwnd, wide(&title).as_ptr());
-            self.refresh_clips();
         }
     }
     unsafe fn text(&self, id: i32) -> String {
@@ -326,6 +495,14 @@ impl App {
         unsafe { self.choose_file(save, false) }
     }
     unsafe fn choose_file(&self, save: bool, audio: bool) -> Option<PathBuf> {
+        unsafe { self.choose_file_with_title(save, audio, None) }
+    }
+    unsafe fn choose_file_with_title(
+        &self,
+        save: bool,
+        audio: bool,
+        title_key: Option<&str>,
+    ) -> Option<PathBuf> {
         use std::os::windows::ffi::OsStringExt;
         unsafe {
             let mut b = vec![0u16; 32768];
@@ -335,20 +512,24 @@ impl App {
                 b[..n].copy_from_slice(&s[..n]);
             }
             let filter = wide(if audio {
-                "WAV (*.wav)\0*.wav\0\0"
+                if save {
+                    "WAV (*.wav)\0*.wav\0FLAC (*.flac)\0*.flac\0MP3 (*.mp3)\0*.mp3\0AAC / M4A (*.m4a)\0*.m4a\0Opus (*.opus)\0*.opus\0\0"
+                } else {
+                    "Audio / video\0*.wav;*.mp3;*.flac;*.m4a;*.aac;*.ogg;*.opus;*.aif;*.aiff;*.wma;*.mp4;*.mov;*.mkv;*.webm;*.avi;*.wv;*.ape;*.tta;*.au;*.mpeg;*.mpg;*.ts;*.m2ts;*.oga\0All files (*.*)\0*.*\0\0"
+                }
             } else {
                 "Sonitrelix (*.sonitrelix)\0*.sonitrelix\0\0"
             });
             let ext = wide(if audio { "wav" } else { "sonitrelix" });
             let title = wide(
                 &self
-                    .t(if audio {
-                        "import_wav"
+                    .t(title_key.unwrap_or(if audio {
+                        if save { "export_audio" } else { "import_wav" }
                     } else if save {
                         "save_as"
                     } else {
                         "open"
-                    })
+                    }))
                     .split('\t')
                     .next()
                     .unwrap_or("Sonitrelix")
@@ -378,7 +559,18 @@ impl App {
                 return None;
             }
             let n = b.iter().position(|c| *c == 0).unwrap_or(b.len());
-            Some(PathBuf::from(std::ffi::OsString::from_wide(&b[..n])))
+            let mut path = PathBuf::from(std::ffi::OsString::from_wide(&b[..n]));
+            if audio && save {
+                let extension = match o.filter_index {
+                    2 => "flac",
+                    3 => "mp3",
+                    4 => "m4a",
+                    5 => "opus",
+                    _ => "wav",
+                };
+                path.set_extension(extension);
+            }
+            Some(path)
         }
     }
     unsafe fn save(&mut self, save_as: bool) -> bool {
@@ -390,6 +582,7 @@ impl App {
         if let Some(p) = path {
             match self.project.save(&p) {
                 Ok(()) => {
+                    self.maintenance.remember(p.clone());
                     self.path = Some(p);
                     self.dirty = false;
                     self.log("project_saved");
@@ -439,6 +632,7 @@ impl App {
                     HELP,
                     ABOUT,
                     CHANGELOG,
+                    LICENSES,
                     EXIT,
                     CLEAR_SELECTION,
                 ]
@@ -448,13 +642,29 @@ impl App {
                 return;
             }
             match id {
+                updates::INSTALL => self.install_update(),
+                updates::CANCEL => {
+                    self.updates.cancel();
+                    self.status(&self.t("update_cancelling"));
+                }
+                updates::SKIP => self.skip_update(),
+                id if (maintenance::FIRST..maintenance::FIRST + 10).contains(&id) => {
+                    self.open_recent(id - maintenance::FIRST)
+                }
+                export_ui::EXPORT | export_ui::EXPORT_SELECTION => {
+                    self.export_audio(id == export_ui::EXPORT_SELECTION)
+                }
+                LEVELS => self.track_levels(),
+                updates::CHECK => self.check_updates(),
+                effects_ui::EFFECTS => self.effects_dialog(),
                 recording_ui::RECORD => self.record_command(),
                 COPY | CUT | PASTE | DELETE_AUDIO | SELECT_ALL | SPLIT | TRIM | SILENCE
                 | INSERT_SILENCE | ADD_EMPTY | DUPLICATE | MOVE_UP | MOVE_DOWN | RENAME_FOCUS
-                | CLEAR_SELECTION | READ_SELECTION => self.edit_command(id),
+                | MARK_START | MARK_END | CLEAR_SELECTION | READ_SELECTION => self.edit_command(id),
                 IMPORT | PLAY | PAUSE | STOP | START | END | REPORT => self.audio_command(id),
                 NEW => {
                     if self.can_close() {
+                        self.maintenance.clear();
                         self.reset_playback();
                         self.cancel_audio_import();
                         self.project = Project {
@@ -470,6 +680,7 @@ impl App {
                         self.selection_anchor = None;
                         self.editor.exact_selection = None;
                         self.editor.exact_cursor = None;
+                        self.editor.bracket_start = None;
                         self.editor.renaming = false;
                         self.build();
                     }
@@ -480,6 +691,8 @@ impl App {
                     {
                         match Project::load(&p) {
                             Ok(project) => {
+                                self.maintenance.clear();
+                                self.maintenance.remember(p.clone());
                                 self.reset_playback();
                                 self.cancel_audio_import();
                                 self.position = 0;
@@ -487,6 +700,7 @@ impl App {
                                 self.selection_anchor = None;
                                 self.editor.exact_selection = None;
                                 self.editor.exact_cursor = None;
+                                self.editor.bracket_start = None;
                                 self.editor.renaming = false;
                                 self.project = project;
                                 self.path = Some(p);
@@ -529,7 +743,8 @@ impl App {
                     self.refresh_clips();
                     SetFocus(GetDlgItem(self.hwnd, 11));
                 }
-                DELETE | RENAME | MUTE | SOLO | ARM => {
+                MUTE | SOLO | ARM => self.toggle_track_state(id),
+                DELETE | RENAME => {
                     self.editor.renaming = false;
                     let index = SendMessageW(GetDlgItem(self.hwnd, 11), 0x188, 0, 0);
                     if index < 0 {
@@ -549,9 +764,6 @@ impl App {
                             self.project.tracks.remove(i);
                         }
                         RENAME => self.project.tracks[i].name = name.trim().into(),
-                        MUTE => self.project.tracks[i].mute ^= true,
-                        SOLO => self.project.tracks[i].solo ^= true,
-                        ARM => self.project.tracks[i].armed ^= true,
                         _ => (),
                     }
                     self.refresh();
@@ -620,10 +832,11 @@ impl App {
                         }
                     }
                 }
-                HELP | ABOUT | CHANGELOG => {
+                HELP | ABOUT | CHANGELOG | LICENSES => {
                     let document = match id {
                         ABOUT => help::Document::About,
                         CHANGELOG => help::Document::Changelog,
+                        LICENSES => help::Document::Licenses,
                         _ => help::Document::Guide,
                     };
                     if let Some(h) = self.help.as_mut().filter(|h| IsWindow(h.hwnd) != 0) {
@@ -657,6 +870,7 @@ impl App {
             self.store = store;
             if language_changed {
                 self.strings = load_strings(self.es);
+                updates::install_text(&mut self.strings, self.updates.report.as_ref());
                 if let Some(viewer) = self.help.as_mut().filter(|h| IsWindow(h.hwnd) != 0) {
                     viewer.update(self.strings.clone());
                 }
@@ -850,7 +1064,12 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
                     if (*ptr).modal.get() {
                         return 0;
                     }
+                    if w & 0xffff == 11 && w >> 16 == 5 {
+                        (*ptr).flush_track_row(false);
+                        return 0;
+                    }
                     if w & 0xffff == 11 && w >> 16 == 1 {
+                        (*ptr).flush_track_row(true);
                         (*ptr).track_selected();
                         return 0;
                     }
@@ -899,6 +1118,10 @@ pub fn run() {
             return;
         }
         let store = Store::load(data.join("preferences.json"));
+        diagnostics::initialize(&data);
+        for warning in &store.warnings {
+            diagnostics::write(&data, "preferences startup", warning);
+        }
         let es = store.settings.general.language == "es";
         let verbose = store.settings.accessibility.detailed_time;
         let mut app = Box::new(App {
@@ -912,9 +1135,11 @@ pub fn run() {
             undo: vec![],
             redo: vec![],
             editor: Default::default(),
+            pending_track_row: Default::default(),
             strings: load_strings(es),
             es,
             verbose,
+            maintenance: maintenance::Maintenance::new(&data),
             data,
             controls: vec![],
             position: 0,
@@ -927,6 +1152,8 @@ pub fn run() {
             recording: None,
             recording_close_pending: false,
             help: None,
+            updates: Default::default(),
+            exporter: Default::default(),
         });
         let class = wide("SonitrelixMain");
         let instance = GetModuleHandleW(null());
@@ -970,6 +1197,10 @@ pub fn run() {
         app.log("startup");
         ShowWindow(app.hwnd, 5);
         SetFocus(GetDlgItem(app.hwnd, 11));
+        if !std::env::args_os().any(|a| a == "--post-update") {
+            app.offer_recovery();
+            app.offer_update_result();
+        }
         if !app.store.warnings.is_empty() {
             let warning = format!(
                 "{}\n{}",
@@ -1004,6 +1235,12 @@ pub fn run() {
                 continue;
             }
             if let Some(sheet) = app.preferences.as_ref().map(|d| d.hwnd) {
+                let page = GetParent(msg.hwnd);
+                if IsChild(sheet, page) != 0
+                    && tab_from_readonly(page, GetDlgItem(page, 9007), &msg)
+                {
+                    continue;
+                }
                 if msg.message == 0x100
                     && (msg.wParam == 0x70 || (msg.wParam == 0x48 && GetKeyState(0x11) < 0))
                 {
@@ -1034,11 +1271,29 @@ pub fn run() {
                 }
                 continue;
             }
+            // Use the translated character so bracket layouts that need AltGr also work.
+            if [0x102, 0x106].contains(&msg.message)
+                && [GetDlgItem(app.hwnd, 11), GetDlgItem(app.hwnd, 25)].contains(&msg.hwnd)
+                && let Some(command) = shortcuts::bracket(msg.wParam)
+            {
+                app.command(command);
+                continue;
+            }
             if [0x100, 0x104].contains(&msg.message) {
                 let ctrl = GetKeyState(0x11) < 0;
                 let shift = GetKeyState(0x10) < 0;
                 let alt = GetKeyState(0x12) < 0;
                 let focus = GetFocus();
+                if msg.wParam == 0x1b && app.exporter.pending() {
+                    app.exporter.cancel();
+                    app.status(&app.t("export_cancelling"));
+                    continue;
+                }
+                if msg.wParam == 0x1b && app.import_pending() {
+                    app.cancel_audio_import();
+                    app.status(&app.t("audio_import_cancelled"));
+                    continue;
+                }
                 if focus == GetDlgItem(app.hwnd, 25)
                     && msg.wParam == 0x0d
                     && !ctrl
@@ -1080,7 +1335,9 @@ pub fn run() {
                 } else {
                     shortcuts::Scope::Other
                 };
-                if let Some(action) = shortcuts::route(msg.wParam, ctrl, shift, alt, scope) {
+                if let Some(action) =
+                    shortcut_config::route(msg.wParam, ctrl, shift, alt, scope, &app.store.settings)
+                {
                     match action {
                         shortcuts::Action::Command(id) => app.command(id),
                         shortcuts::Action::TogglePlay => app.toggle_playback(),
@@ -1147,6 +1404,7 @@ mod tests {
                 "transport",
                 "tools",
                 "help_menu",
+                "effects_menu",
                 "tracks",
                 "clips_label",
                 "name",
@@ -1193,10 +1451,12 @@ mod tests {
                 undo: vec![],
                 redo: vec![],
                 editor: Default::default(),
+                pending_track_row: Default::default(),
                 strings: load_strings(false),
                 es: false,
                 verbose: true,
                 data: data.clone(),
+                maintenance: maintenance::Maintenance::new(&data),
                 controls: vec![],
                 position: 0,
                 selection: (0, 0),
@@ -1208,6 +1468,8 @@ mod tests {
                 recording: None,
                 recording_close_pending: false,
                 help: None,
+                updates: Default::default(),
+                exporter: Default::default(),
             });
             let instance = GetModuleHandleW(null());
             let class = wide("SonitrelixNativeTest");
@@ -1267,8 +1529,24 @@ mod tests {
             SetWindowTextW(GetDlgItem(app.hwnd, 13), wide("Vocals ñ").as_ptr());
             app.command(ADD);
             assert_eq!(app.project.tracks[0].name, "Vocals ñ");
+            app.playback.state = sonitrelix_engine::State::Playing;
+            let focus = GetFocus();
+            for (command, expected) in [
+                (ARM, "armed"),
+                (ARM, "unarmed"),
+                (SOLO, "solo_on"),
+                (SOLO, "solo_off"),
+            ] {
+                app.command(command);
+                assert_eq!(app.playback.state, sonitrelix_engine::State::Playing);
+                assert!(app.text(21).starts_with(&app.t(expected)));
+                assert_eq!(GetFocus(), focus);
+            }
             app.command(MUTE);
             assert!(app.project.tracks[0].mute);
+            assert_eq!(app.playback.state, sonitrelix_engine::State::Playing);
+            assert_eq!(app.text(21), app.t("muted"));
+            assert_eq!(GetFocus(), focus);
             app.command(UNDO);
             assert!(!app.project.tracks[0].mute);
             app.command(REDO);
@@ -1370,6 +1648,20 @@ mod tests {
             app.insert_recorded(0, 480, recorded);
             assert_eq!(app.project.tracks[0].frames(), 1480);
             assert!(app.project.tracks[0].clips[0].source.is_none());
+            assert_eq!(app.editor.exact_cursor, Some((0, 480)));
+            assert_eq!(app.editor.exact_selection, Some((0, 480, 1480)));
+            app.editor.exact_cursor = Some((0, 481));
+            app.command(shortcuts::bracket(b'[' as usize).unwrap());
+            app.move_cursor(true, false, false);
+            assert_eq!(app.editor.bracket_start, Some((0, 481)));
+            app.editor.exact_cursor = Some((0, 1241));
+            app.command(shortcuts::bracket(b']' as usize).unwrap());
+            assert_eq!(app.selected_range(0), (481, 1241));
+            assert_eq!(app.editor.bracket_start, None);
+            app.log_error("test audio export", "first line\nsecond line");
+            let error_log = fs::read_to_string(data.join("error.log")).unwrap();
+            assert!(error_log.contains("test audio export"));
+            assert!(error_log.contains("first line second line"));
             app.command(UNDO);
             assert!(app.project.tracks[0].clips.is_empty());
             app.command(REDO);
@@ -1393,6 +1685,24 @@ mod tests {
             app.command(PASTE);
             assert_eq!(app.project.tracks[empty].sample_rate, 44100);
             assert_eq!(app.project.tracks[empty].frames(), 88200);
+            let info = sonitrelix_audio_io::WavReader::open(&source).unwrap().info;
+            let rendered = data.join("rendered-effect.wav");
+            let info = sonitrelix_effects::render(
+                sonitrelix_audio_io::Timeline::single(source.clone(), info).unwrap(),
+                sonitrelix_effects::Effect::Amplify(-6.),
+                &rendered,
+                &std::sync::atomic::AtomicBool::new(false),
+                &std::sync::atomic::AtomicU32::new(0),
+            )
+            .unwrap();
+            let before = app.project.clone();
+            app.commit_effect(0, 480, 1480, rendered.clone(), info);
+            assert!(app.project.tracks[0].sources().any(|m| m.path == rendered));
+            app.command(UNDO);
+            assert_eq!(app.project, before);
+            app.command(REDO);
+            assert!(app.project.tracks[0].sources().any(|m| m.path == rendered));
+            assert_eq!(fs::read(&source).unwrap(), wav);
             for (command, title) in [
                 (HELP, "help_title"),
                 (ABOUT, "about_title"),
@@ -1406,6 +1716,12 @@ mod tests {
                 assert_eq!(String::from_utf16_lossy(&text[..n as usize]), app.t(title));
             }
             app.help = None;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while app.maintenance.pending() {
+                assert!(std::time::Instant::now() < deadline);
+                app.poll_maintenance();
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
             DestroyWindow(app.hwnd);
             fs::remove_dir_all(data).unwrap();
         }

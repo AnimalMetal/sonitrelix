@@ -16,6 +16,30 @@ pub struct Segment {
 pub struct Timeline {
     format: WavInfo,
     segments: Vec<Segment>,
+    mix: Vec<MixTrack>,
+    live_mix: Option<LiveMix>,
+}
+/// Audibility for the decode worker. The render thread consumes PCM only.
+#[derive(Clone, Debug)]
+pub struct LiveMix(std::sync::Arc<std::sync::RwLock<Vec<bool>>>);
+
+impl LiveMix {
+    pub fn new(audible: Vec<bool>) -> Self {
+        Self(std::sync::Arc::new(std::sync::RwLock::new(audible)))
+    }
+
+    pub fn update(&self, audible: impl Iterator<Item = bool>) {
+        let mut current = self.0.write().unwrap();
+        for (value, enabled) in current.iter_mut().zip(audible) {
+            *value = enabled;
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub struct MixTrack {
+    pub timeline: Timeline,
+    pub gain: f32,
+    pub pan: f32,
 }
 impl Timeline {
     pub fn new(rate: u32, channels: u16, segments: Vec<Segment>) -> io::Result<Self> {
@@ -52,6 +76,8 @@ impl Timeline {
                 encoding: Encoding::Float,
             },
             segments,
+            mix: vec![],
+            live_mix: None,
         })
     }
     pub fn single(path: PathBuf, info: WavInfo) -> io::Result<Self> {
@@ -68,6 +94,72 @@ impl Timeline {
     pub fn info(&self) -> WavInfo {
         self.format
     }
+    pub fn is_live_mix(&self) -> bool {
+        self.live_mix.is_some()
+    }
+    /// Stereo mix at a common rate. All resampling and disk access happen in readers/workers.
+    pub fn mix(rate: u32, tracks: Vec<MixTrack>) -> io::Result<Self> {
+        if !(8000..=192000).contains(&rate) {
+            return Err(invalid("Mix rate"));
+        }
+        let mut frames = 0;
+        for t in &tracks {
+            if !t.timeline.mix.is_empty()
+                || !t.gain.is_finite()
+                || !(0. ..=16.).contains(&t.gain)
+                || !t.pan.is_finite()
+                || !(-1. ..=1.).contains(&t.pan)
+            {
+                return Err(invalid("Mix gain, pan or nested mix"));
+            }
+            let n = (u128::from(t.timeline.info().frames) * u128::from(rate))
+                .div_ceil(u128::from(t.timeline.info().sample_rate));
+            frames = frames.max(u64::try_from(n).map_err(|_| invalid("Mix duration overflow"))?);
+        }
+        Ok(Self {
+            format: WavInfo {
+                sample_rate: rate,
+                channels: 2,
+                bits: 32,
+                frames,
+                encoding: Encoding::Float,
+            },
+            segments: vec![],
+            mix: tracks,
+            live_mix: None,
+        })
+    }
+    pub fn with_live_mix(mut self, controls: LiveMix) -> io::Result<Self> {
+        if self.mix.len() != controls.0.read().unwrap().len() {
+            return Err(invalid("Live mix track count"));
+        }
+        self.live_mix = Some(controls);
+        Ok(self)
+    }
+    pub fn slice(&self, start: u64, end: u64) -> io::Result<Self> {
+        if !self.mix.is_empty() {
+            return Err(invalid("Slice tracks before mixing"));
+        }
+        if end <= start || end > self.format.frames {
+            return Err(invalid("Timeline slice bounds"));
+        }
+        let mut position = 0;
+        let mut segments = vec![];
+        for s in &self.segments {
+            let a = start.max(position);
+            let b = end.min(position + s.frames);
+            if b > a {
+                let mut part = s.clone();
+                part.frames = b - a;
+                if part.source.is_some() {
+                    part.source_start += a - position;
+                }
+                segments.push(part);
+            }
+            position += s.frames;
+        }
+        Self::new(self.format.sample_rate, self.format.channels, segments)
+    }
 }
 pub struct TimelineReader {
     timeline: Timeline,
@@ -75,15 +167,107 @@ pub struct TimelineReader {
     within: u64,
     reader: Option<WavReader>,
     reader_source: Option<Source>,
+    mix: Vec<Resampled>,
+    mix_position: u64,
+    audible: Vec<bool>,
+}
+fn resampler(source: u32, target: u32) -> Vec<Vec<f32>> {
+    if source == target {
+        return vec![];
+    }
+    let ratio = (target as f64 / source as f64).min(1.);
+    let taps = ((64. / ratio).ceil() as usize)
+        .clamp(64, 1536)
+        .next_multiple_of(2);
+    let cutoff = 0.95 * ratio;
+    (0..=512)
+        .map(|phase| {
+            let fraction = phase as f64 / 512.;
+            let mut coefficients: Vec<_> = (0..taps)
+                .map(|tap| {
+                    let x = tap as f64 - (taps / 2) as f64 + 1. - fraction;
+                    let sinc = if x.abs() < 1e-12 {
+                        cutoff
+                    } else {
+                        (std::f64::consts::PI * cutoff * x).sin() / (std::f64::consts::PI * x)
+                    };
+                    let window = 0.5 + 0.5 * (std::f64::consts::PI * x / (taps / 2) as f64).cos();
+                    (sinc * window) as f32
+                })
+                .collect();
+            let sum = coefficients.iter().sum::<f32>();
+            for v in &mut coefficients {
+                *v /= sum;
+            }
+            coefficients
+        })
+        .collect()
+}
+struct Resampled {
+    reader: Box<TimelineReader>,
+    cache: Vec<f32>,
+    start: u64,
+    count: usize,
+    left: f32,
+    right: f32,
+    coefficients: Vec<Vec<f32>>,
+}
+impl Resampled {
+    fn sample(&mut self, frame: u64) -> io::Result<[f32; 2]> {
+        let info = self.reader.info();
+        if frame >= info.frames {
+            return Ok([0.; 2]);
+        }
+        if self.count == 0 || frame < self.start || frame >= self.start + self.count as u64 {
+            let start =
+                frame.saturating_sub(self.coefficients.first().map_or(2, |v| v.len() + 2) as u64);
+            self.reader.seek_frame(start)?;
+            self.start = start;
+            self.count = self.reader.read_frames(&mut self.cache)?;
+        }
+        let i = (frame - self.start) as usize * usize::from(info.channels);
+        if info.channels == 1 {
+            Ok([self.cache[i] * self.left, self.cache[i] * self.right])
+        } else {
+            Ok([self.cache[i] * self.left, self.cache[i + 1] * self.right])
+        }
+    }
 }
 impl TimelineReader {
     pub fn new(timeline: Timeline) -> Self {
+        let mix = timeline
+            .mix
+            .iter()
+            .map(|t| {
+                let (left, right) = if t.timeline.info().channels == 1 {
+                    let angle = (t.pan + 1.) * std::f32::consts::FRAC_PI_4;
+                    (angle.cos(), angle.sin())
+                } else {
+                    ((1. - t.pan).min(1.), (1. + t.pan).min(1.))
+                };
+                Resampled {
+                    reader: Box::new(Self::new(t.timeline.clone())),
+                    cache: vec![0.; 8192 * usize::from(t.timeline.info().channels)],
+                    start: 0,
+                    count: 0,
+                    left: left * t.gain,
+                    right: right * t.gain,
+                    coefficients: resampler(
+                        t.timeline.info().sample_rate,
+                        timeline.info().sample_rate,
+                    ),
+                }
+            })
+            .collect();
         Self {
+            audible: vec![true; timeline.mix.len()],
             timeline,
             index: 0,
             within: 0,
             reader: None,
             reader_source: None,
+            mix,
+            mix_position: 0,
         }
     }
     pub fn info(&self) -> WavInfo {
@@ -91,6 +275,10 @@ impl TimelineReader {
     }
     pub fn seek_frame(&mut self, frame: u64) -> io::Result<u64> {
         let target = frame.min(self.timeline.format.frames);
+        self.mix_position = target;
+        for track in &mut self.mix {
+            track.count = 0;
+        }
         let mut n = target;
         self.index = 0;
         while self.index < self.timeline.segments.len()
@@ -105,6 +293,58 @@ impl TimelineReader {
         Ok(target)
     }
     pub fn read_frames(&mut self, out: &mut [f32]) -> io::Result<usize> {
+        if !self.mix.is_empty() {
+            let n = (out.len() / 2).min(8192).min(
+                self.timeline
+                    .info()
+                    .frames
+                    .saturating_sub(self.mix_position) as usize,
+            );
+            out[..n * 2].fill(0.);
+            let rate = self.timeline.info().sample_rate;
+            if let Some(controls) = &self.timeline.live_mix {
+                self.audible.copy_from_slice(&controls.0.read().unwrap());
+            }
+            for (track, enabled) in self.mix.iter_mut().zip(&self.audible) {
+                if !enabled {
+                    continue;
+                }
+                let source_rate = track.reader.info().sample_rate;
+                for i in 0..n {
+                    let numerator =
+                        u128::from(self.mix_position + i as u64) * u128::from(source_rate);
+                    let frame = (numerator / u128::from(rate)) as u64;
+                    if frame >= track.reader.info().frames {
+                        continue;
+                    }
+                    let fraction = (numerator % u128::from(rate)) as f32 / rate as f32;
+                    if track.coefficients.is_empty() {
+                        let v = track.sample(frame)?;
+                        for c in 0..2 {
+                            out[i * 2 + c] += v[c];
+                        }
+                    } else {
+                        let phase = fraction * 512.;
+                        let table = phase.floor() as usize;
+                        let blend = phase - table as f32;
+                        let taps = track.coefficients[table].len();
+                        for tap in 0..taps {
+                            let coefficient = track.coefficients[table][tap] * (1. - blend)
+                                + track.coefficients[table + 1][tap] * blend;
+                            let index = (i128::from(frame) + tap as i128 - (taps / 2) as i128 + 1)
+                                .clamp(0, i128::from(track.reader.info().frames) - 1)
+                                as u64;
+                            let v = track.sample(index)?;
+                            for c in 0..2 {
+                                out[i * 2 + c] += v[c] * coefficient;
+                            }
+                        }
+                    }
+                }
+            }
+            self.mix_position += n as u64;
+            return Ok(n);
+        }
         let channels = usize::from(self.timeline.format.channels);
         let requested = (out.len() / channels).min(8192);
         let mut done = 0;
@@ -157,6 +397,52 @@ impl TimelineReader {
 mod tests {
     use super::*;
     #[test]
+    fn mixed_rates_gain_pan_exact_seek_and_unequal_endings() {
+        let dir = std::env::temp_dir().join(format!("sonitrelix-mix-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("a.wav");
+        let b = dir.join("b.wav");
+        let mut w = WavWriter::create_float(&a, 24000, 1).unwrap();
+        w.write_frames(&[0.2; 4]).unwrap();
+        let ai = w.finish().unwrap();
+        let mut w = WavWriter::create_float(&b, 48000, 2).unwrap();
+        w.write_frames(&[0.1, 0.3].repeat(12)).unwrap();
+        let bi = w.finish().unwrap();
+        let mix = Timeline::mix(
+            48000,
+            vec![
+                MixTrack {
+                    timeline: Timeline::single(a, ai).unwrap(),
+                    gain: 2.,
+                    pan: -1.,
+                },
+                MixTrack {
+                    timeline: Timeline::single(b, bi).unwrap(),
+                    gain: 1.,
+                    pan: 0.,
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(mix.info().frames, 12);
+        let mut reader = TimelineReader::new(mix);
+        let mut output = [0.; 24];
+        assert_eq!(reader.read_frames(&mut output).unwrap(), 12);
+        for f in output[..16].as_chunks::<2>().0 {
+            assert!((f[0] - 0.5).abs() < 0.0001);
+            assert!((f[1] - 0.3).abs() < 0.0001);
+        }
+        for f in output[16..].as_chunks::<2>().0 {
+            assert!((f[0] - 0.1).abs() < 0.0001);
+        }
+        reader.seek_frame(9).unwrap();
+        let mut tail = [0.; 6];
+        assert_eq!(reader.read_frames(&mut tail).unwrap(), 3);
+        assert_eq!(&output[18..], tail);
+        drop(reader);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
     fn clipped_sources_and_silence_are_rendered_in_order() {
         let path =
             std::env::temp_dir().join(format!("sonitrelix-timeline-{}.wav", std::process::id()));
@@ -193,6 +479,29 @@ mod tests {
             ],
         )
         .unwrap();
+        let controls = LiveMix::new(vec![true]);
+        let mix = Timeline::mix(
+            48000,
+            vec![MixTrack {
+                timeline: timeline.clone(),
+                gain: 1.,
+                pan: -1.,
+            }],
+        )
+        .unwrap()
+        .with_live_mix(controls.clone())
+        .unwrap();
+        let mut live = TimelineReader::new(mix);
+        let mut frame = [0.; 2];
+        assert_eq!(live.read_frames(&mut frame).unwrap(), 1);
+        assert_eq!(frame, [2000. / 32768., 0.]);
+        controls.update([false].into_iter());
+        assert_eq!(live.read_frames(&mut frame).unwrap(), 1);
+        assert_eq!(frame, [0., 0.]);
+        controls.update([true].into_iter());
+        assert_eq!(live.read_frames(&mut frame).unwrap(), 1);
+        assert_eq!(frame, [4000. / 32768., 0.]);
+        drop(live);
         let mut r = TimelineReader::new(timeline);
         let mut out = [0f32; 7];
         assert_eq!(r.read_frames(&mut out).unwrap(), 7);

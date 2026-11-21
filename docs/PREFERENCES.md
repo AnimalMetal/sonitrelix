@@ -1,3 +1,9 @@
+# Additions - 0.6.0
+
+Tools > Preferences now has six tabs: General, Devices, Recording/playback, Editing/keyboard, Accessibility and Export. General controls daily update checks; Editing/keyboard configures track/editing shortcuts; Export selects rate, channels and MP3 bitrate. Apply saves, Cancel discards pending changes. Ctrl+Tab changes category. Live microphone monitoring remains unavailable. Actual NVDA/JAWS checks remain pending.
+
+## Historical notes
+
 # Preferences / Preferencias — 0.4.0
 
 Open Tools > Preferences, or Ctrl+Comma. Options has been renamed Tools; language and accessibility settings have moved into this dialog.

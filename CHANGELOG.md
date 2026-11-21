@@ -1,4 +1,40 @@
-# Changelog / Cambios
+# Changelog
+
+## 0.6.0 — first Windows release
+
+- The portable Windows ZIP includes FFmpeg for additional import and export formats and audio effects.
+
+- Refreshed both user guides to reflect the current recording, selection, effects and export workflow.
+
+- Added individual Reset buttons for numeric effect, volume and pan settings.
+
+- Noise Reduction now estimates the noise floor. Effects and Volume and Pan include keyboard sliders and exact numeric fields.
+
+- Mark selection boundaries with [ and ], export the range, hear clearer Solo feedback and inspect failures in data/error.log.
+
+- Added Noise Reduction, De-esser, De-hum, Change Tempo and Automatic Ducking with FFmpeg, Preview and Undo.
+
+- After recording, playback starts at the new take. Tab leaves the Volume and Pan help text and reaches OK.
+- Optional FFmpeg support expands Ctrl+I and adds M4A/AAC and Opus export, plus an MP3 encoder fallback.
+
+- Added an English/Spanish HTML user guide with beginner-to-advanced lessons, linked contents and shortcut tables; open it from the F1 guide.
+
+Multitrack mix with gain/pan and resampling; vocal overdubs with coordinated pause/resume and manual offset; MP3/FLAC/M4A imports; WAV/FLAC/MP3 mix export; Export preferences; editing shortcut customization; recent projects; recovery checkpoints; schema 4; signed portable EXE updates with startup rollback. English/Spanish help and license notices are included. Actual NVDA/JAWS, microphone and live GitHub acceptance remain pending.
+
+Español: mezcla multipista, voz sobre música, exportación WAV/MP3/FLAC, preferencias de exportación, atajos configurables, recientes, recuperación y actualizaciones firmadas. Pendientes pruebas reales con lectores, micrófono y GitHub.
+
+## Earlier releases / Versiones anteriores
+
+## 0.5.0 — Effects and release checking / Efectos y versiones
+
+- Open one Effects dialog with Ctrl+E from Tracks/Clips: amplify, normalize, fade in/out, reverse, silence, three-band EQ, compressor, noise gate and reverb.
+- Selection defaults to the whole selected track when no interval is selected. Numeric settings, short Preview, Stop preview, Apply and Cancel keep the workflow short.
+- Effects render in a cancellable worker to new float32 WAV assets; Apply is undoable and sources remain unchanged. Reverb has wet/decay/tail controls; added tail shifts later audio.
+- Help > Check for updates checks published GitHub Releases in a worker and offers the official download page in a read-only viewer. Installation is manual; no automatic executable replacement.
+- Version tags matching Cargo now publish the tested Windows ZIP and checksum to GitHub Releases. Hosted publishing and live update checks remain to be verified.
+- English/Spanish guide, changelog and labels updated. Native roles, parameter validation, undo/source preservation and DSP tests added; real NVDA/JAWS and audible effects assessment remain pending.
+
+Efectos sencillos con Escuchar y Aplicar, incluida reverberación; Ctrl+Z deshace. Ayuda busca versiones de GitHub; la instalación sigue siendo manual.
 
 ## 0.4.0 — Clip editing and standalone recording / Edición y grabación
 

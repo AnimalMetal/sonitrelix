@@ -1,0 +1,8 @@
+[package]
+name = "sonitrelix-mixer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+sonitrelix-session.workspace = true
+sonitrelix-audio-io = { path = "../audio-io" }

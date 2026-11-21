@@ -157,6 +157,7 @@ unsafe extern "system" {
     pub fn TranslateMessage(m: *const MSG) -> i32;
     pub fn DispatchMessageW(m: *const MSG) -> isize;
     pub fn IsDialogMessageW(h: HWND, m: *mut MSG) -> i32;
+    fn GetNextDlgTabItem(dialog: HWND, current: HWND, previous: i32) -> HWND;
     pub fn PostQuitMessage(code: i32);
     pub fn SetWindowLongPtrW(h: HWND, index: i32, v: isize) -> isize;
     pub fn GetWindowLongPtrW(h: HWND, index: i32) -> isize;
@@ -210,4 +211,24 @@ unsafe extern "system" {
 }
 pub fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
+}
+
+/// Multiline edits can claim Tab as text input. Route it to the next dialog control.
+pub unsafe fn tab_from_readonly(dialog: HWND, control: HWND, msg: &MSG) -> bool {
+    unsafe {
+        if msg.message != 0x100
+            || msg.wParam != 9
+            || msg.hwnd != control
+            || GetKeyState(0x11) < 0
+            || GetKeyState(0x12) < 0
+        {
+            return false;
+        }
+        let next = GetNextDlgTabItem(dialog, control, i32::from(GetKeyState(0x10) < 0));
+        if next.is_null() {
+            return false;
+        }
+        SetFocus(next);
+        true
+    }
 }

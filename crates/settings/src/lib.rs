@@ -5,6 +5,10 @@ use sonitrelix_session::atomic_write;
 use std::{fs, io, path::PathBuf};
 
 pub const SAMPLE_RATES: &[u32] = &[22050, 44100, 48000, 88200, 96000, 192000];
+pub const EXPORT_RATES: &[u32] = &[
+    0, 8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 192000,
+];
+pub const BITRATES: &[u32] = &[64, 96, 128, 160, 192, 224, 256, 320];
 pub const BUFFER_SIZES: &[u32] = &[128, 256, 512, 1024, 2048];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -15,6 +19,7 @@ pub struct Settings {
     pub recording: Recording,
     pub editing: Editing,
     pub accessibility: Accessibility,
+    pub export: Export,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
 }
@@ -32,7 +37,8 @@ macro_rules! section {
 }
 section!(General {
     language: String = "en".into(),
-    new_project_sample_rate: u32 = 48000
+    new_project_sample_rate: u32 = 48000,
+    automatic_updates: bool = true
 });
 section!(Devices {
     input_id: String = String::new(),
@@ -52,6 +58,11 @@ section!(Accessibility {
     detailed_time: bool = true,
     focus_status: bool = false
 });
+section!(Export {
+    sample_rate: u32 = 0,
+    channels: u16 = 2,
+    mp3_bitrate: u32 = 192
+});
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -61,6 +72,7 @@ impl Default for Settings {
             recording: Default::default(),
             editing: Default::default(),
             accessibility: Default::default(),
+            export: Default::default(),
             extra: Default::default(),
         }
     }
@@ -88,11 +100,21 @@ impl Settings {
                 extra: self.accessibility.extra.clone(),
                 ..Default::default()
             },
+            export: Export {
+                extra: self.export.extra.clone(),
+                ..Default::default()
+            },
             extra: self.extra.clone(),
             ..Default::default()
         }
     }
     pub fn validate(&self) -> Result<(), &'static str> {
+        if !EXPORT_RATES.contains(&self.export.sample_rate)
+            || ![1, 2].contains(&self.export.channels)
+            || !BITRATES.contains(&self.export.mp3_bitrate)
+        {
+            return Err("export");
+        }
         if !["en", "es"].contains(&self.general.language.as_str()) {
             return Err("language");
         }
@@ -135,6 +157,10 @@ pub struct Store {
     last_good: Option<Vec<u8>>,
 }
 impl Store {
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
     pub fn load(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
         let mut store = Self {

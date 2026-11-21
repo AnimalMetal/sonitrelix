@@ -6,6 +6,13 @@ pub(super) enum Scope {
     Text,
     Other,
 }
+pub(super) fn bracket(character: usize) -> Option<usize> {
+    match character {
+        0x5b => Some(MARK_START),
+        0x5d => Some(MARK_END),
+        _ => None,
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Action {
     Command(usize),
@@ -46,6 +53,7 @@ pub(super) fn route(
             (0x4f, false) => Some(OPEN),
             (0x53, false) => Some(SAVE),
             (0x53, true) => Some(SAVE_AS),
+            (0x45, true) => Some(super::export_ui::EXPORT),
             (0x49, false) => Some(IMPORT),
             (0xbc, false) => Some(PREFERENCES),
             _ => None,
@@ -78,11 +86,14 @@ pub(super) fn route(
     if ctrl {
         let id = match (key, shift) {
             (0x41, false) => SELECT_ALL,
+            (0x45, false) => super::effects_ui::EFFECTS,
+            (0x47, false) => super::LEVELS,
             (0x43, false) => COPY,
             (0x58, false) => CUT,
             (0x56, false) => PASTE,
             (0x54, false) => SPLIT,
             (0x54, true) => TRIM,
+            (0x58, true) => super::export_ui::EXPORT_SELECTION,
             (0x4c, false) => SILENCE,
             (0x49, true) => INSERT_SILENCE,
             (0x44, true) => DUPLICATE,
@@ -134,6 +145,14 @@ mod tests {
     fn documented_shortcuts_match_commands() {
         let docs = include_str!("../../../docs/SHORTCUTS.md");
         for (label, key, ctrl, shift, alt, command) in [
+            (
+                "Ctrl+E",
+                0x45,
+                true,
+                false,
+                false,
+                super::super::effects_ui::EFFECTS,
+            ),
             ("Ctrl+A", 0x41, true, false, false, SELECT_ALL),
             ("Ctrl+C", 0x43, true, false, false, COPY),
             ("Ctrl+X", 0x58, true, false, false, CUT),

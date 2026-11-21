@@ -1,33 +1,34 @@
 # Sonitrelix
 
-GitHub: [AnimalMetal/sonitrelix](https://github.com/AnimalMetal/sonitrelix). See [publishing and Windows builds](docs/GITHUB.md). In-app updates are not implemented yet.
+Original Rust, Windows-native audio editor with English/Spanish interfaces. **0.6.0 is the first Windows release.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
 
-An original Rust, Windows-native audio editor designed around keyboard access and screen readers. **0.4.0 implements WAV clip editing and standalone microphone recording.** English and Spanish are included. This is a development build; physical microphone, listening and NVDA/JAWS acceptance tests remain pending.
+Download `Sonitrelix-windows-x64.zip`, extract the whole folder and open `Sonitrelix.exe`. FFmpeg and the required Visual C++ runtime files are included. Press F1 for the user guide. [Windows downloads](https://github.com/AnimalMetal/sonitrelix/releases)
 
-Implemented: native controls, tabbed Tools > Preferences (Ctrl+,), input/output discovery, streaming selected-track WASAPI preview, precise time fields, source-preserving clip edits, internal audio clipboard, split/trim/silence, track management, undo/redo, schema-3 project saving and legacy migration, background PCM16 capture with pause/stop and manual placement offset, structured logs, and searchable F1 help.
+Implemented: non-destructive clip editing, exact times, undo/redo, synchronized multitrack playback, mute/solo, gain/pan, vocal recording while backing music plays, manual offset, effects including reverb, WAV/FLAC/MP3 mix export, six-tab Preferences, editing shortcut customization, recent projects, recovery checkpoints and signed portable EXE updates.
 
-Import: mono/stereo RIFF/WAVE PCM 8/16/24/32-bit or float32, 8000–192000 Hz. Capture creates PCM16 WAV assets in data/recordings. Keep imported and recorded assets in place: project files store absolute references, not embedded audio.
+Import supports WAV, MP3, FLAC and AAC in M4A through Windows Media Foundation. The bundled FFmpeg adds Ogg Vorbis, Opus, AIFF, audio extraction from supported video files, AAC and Opus export, and an MP3 encoder fallback. Export also supports PCM16 WAV and FLAC. MP3 may contain encoder padding. Use WAV or FLAC for exact duration. [FFmpeg formats and effects](docs/FFMPEG.md)
 
-Start: Ctrl+I imports WAV. In Tracks or Clips, Space previews; Ctrl+Space pauses; Ctrl+A selects all audio on this track; Ctrl+C/X/V copies/cuts/pastes. Ctrl+T splits, Ctrl+Shift+T trims. Ctrl+Shift+N adds a track, F2 renames, A arms, R starts/stops standalone recording. Playback stops before recording. F6 reads transport; F7 reads selection. Text fields keep native editing keys. See [all shortcuts](docs/SHORTCUTS.md) and [editing/recording tests](docs/EDITING_RECORDING.md).
+Ctrl+I imports music. Ctrl+Shift+N creates a track, F2 names it, A arms it and R records/stops over backing tracks. Use headphones. Space plays/stops the mix; Ctrl+Space pauses. In Tracks/Clips, Ctrl+A selects track audio, Ctrl+C/X/V copies/cuts/pastes, Ctrl+T splits, Ctrl+E opens effects and Ctrl+G adjusts gain/pan. Ctrl+Shift+E exports. Text fields retain normal editing keys.
 
-Not implemented: synchronized multitrack playback/overdubs, live monitoring, effects, audio mixdown/export, MP3/FLAC/OGG/AAC, gain/pan editing, shortcut remapping, recent projects, or full project crash recovery. Solo remains metadata; mute prevents selected-track preview. Periodic recording-header checkpoints do not guarantee recovery after a crash.
-
-Build/run with stable Rust and MSVC build tools:
+Keep source files and data/imports and data/recordings: projects reference assets. Dirty metadata is checkpointed every 30 seconds, without guarantees for unfinished recordings/power loss. Live microphone monitoring, automatic latency measurement, streaming compressed editing and freely overlapping clips remain future work.
 
 ```powershell
-cargo build --release --workspace --locked
+cargo test --workspace --locked
+.\tools\build-release.ps1
 .\target\release\Sonitrelix.exe
+.\tools\package.ps1
 ```
 
-See [BUILDING.md](BUILDING.md), [Preferences](docs/PREFERENCES.md), [architecture](docs/ARCHITECTURE.md), [validation](docs/VALIDATION.md), [accessibility](docs/ACCESSIBILITY.md), [project schema](docs/PROJECT_FORMAT.md), and [dependency notices](THIRD_PARTY_NOTICES.md).
+Read the [English HTML user guide](docs/user-guide.en.html) or [Spanish HTML guide](docs/user-guide.es.html), from beginner to advanced with shortcut tables. The F1 text viewer includes an Open HTML guide action.
+
+See [building](BUILDING.md), [shortcuts](docs/SHORTCUTS.md), [multitrack test workflow](docs/MULTITRACK.md), [updates](docs/UPDATES.md), [validation](docs/VALIDATION.md), [project format](docs/PROJECT_FORMAT.md) and [licenses](THIRD_PARTY_NOTICES.md). Repository: https://github.com/AnimalMetal/sonitrelix.
 
 ## Español
 
-Sonitrelix 0.4.0 edita fragmentos WAV sin alterar originales y graba micrófono de forma independiente. Incluye Preferencias con cinco pestañas, inglés/español, tiempos exactos, deshacer/rehacer, proyectos y guía F1 con secciones y búsqueda.
+Sonitrelix 0.6.0 incluye mezcla multipista, grabación de voz sobre música, tiempos exactos, efectos con reverberación, exportación WAV/MP3/FLAC, preferencias con seis pestañas, atajos configurables, recientes, recuperación y actualizaciones firmadas. La interfaz y guía F1 están en español e inglés.
 
-En Pistas o Fragmentos: Ctrl+A selecciona todo el audio de la pista; Ctrl+C/X/V copia/corta/pega; Ctrl+T divide y Ctrl+Mayús+T recorta. Ctrl+Mayús+N crea pista, F2 renombra, A arma y R graba/detiene. F6 lee transporte; F7 selección. Los campos de texto conservan sus teclas. La reproducción se detiene antes de grabar: aún no hay grabación sobre acompañamiento, mezcla, efectos ni exportación. Conserve los archivos de origen y de data/recordings.
+Importe música con Ctrl+I, cree pista con Ctrl+Mayús+N, nombre con F2, arme con A y grabe/detenga con R. Use auriculares. Ctrl+G ajusta volumen/panorama, Ctrl+E abre efectos y Ctrl+Mayús+E exporta. Conserve los originales y carpetas de audio de data. No hay monitorización directa. El desfase se ajusta manualmente en Preferencias. Siguen pendientes pruebas físicas y con NVDA/JAWS; la accesibilidad no se considera terminada.
 
-Faltan pruebas físicas de micrófono y pruebas reales con NVDA/JAWS; no se considera completa la accesibilidad. Consulte [atajos](docs/SHORTCUTS.md) y [pruebas](docs/EDITING_RECORDING.md).
 ## Reference and license
 
 The [Elion README](https://github.com/Elion-Daw/Elion), [build documentation](https://github.com/Elion-Daw/Elion/blob/main/BUILDING.md), and [licensing inventory](https://github.com/Elion-Daw/Elion/blob/main/LICENSES.md) informed the keyboard-first design review. Elion uses C++/JUCE/Tracktion and AGPL-3.0-only for its original code. No Elion source, documentation text, patches, or assets were copied. Sonitrelix's original code is MIT licensed. Dependencies retain their own notices.

@@ -1,0 +1,10 @@
+[package]
+name = "sonitrelix-updater"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
+serde.workspace = true
+serde_json.workspace = true
+sonitrelix-session.workspace = true

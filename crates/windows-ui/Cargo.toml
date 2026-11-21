@@ -16,4 +16,11 @@ sonitrelix-devices = { path = "../devices" }
 sonitrelix-audio-io = {path="../audio-io"}
 sonitrelix-engine = {path="../engine"}
 sonitrelix-editing = {path="../editing"}
+sonitrelix-effects = {path="../effects"}
+sonitrelix-mixer = {path="../mixer"}
+sonitrelix-updater = {path="../updater"}
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_UI_Accessibility", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant"] }
+windows-core = "0.62.2"
 

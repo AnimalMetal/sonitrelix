@@ -6,11 +6,15 @@ pub(super) enum Document {
     Guide,
     About,
     Changelog,
+    Updates,
+    Licenses,
 }
 impl Document {
     fn keys(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Guide => ("guide", "help_title", "help_guide_label"),
+            Self::Updates => ("update_text", "update_title", "update_label"),
+            Self::Licenses => ("license_text", "license_title", "license_label"),
             Self::About => ("about_text", "about_title", "about_content_label"),
             Self::Changelog => (
                 "changelog_text",
@@ -39,6 +43,11 @@ impl View {
     }
     unsafe fn install(&mut self, h: HWND, guide: &str) {
         unsafe {
+            let guide = if self.document == Document::Licenses {
+                include_str!(concat!(env!("OUT_DIR"), "/licenses.txt"))
+            } else {
+                guide
+            };
             let (_, title_key, label_key) = self.document.keys();
             let combo = GetDlgItem(h, 901);
             SendMessageW(combo, 0x14b, 0, 0);
@@ -71,10 +80,67 @@ impl View {
                 SetWindowTextW(GetDlgItem(h, id), wide(&self.t(key)).as_ptr());
             }
             SetWindowTextW(h, wide(&self.t(title_key)).as_ptr());
+            SetWindowTextW(
+                GetDlgItem(h, 910),
+                wide(&self.t(if self.document == Document::Guide {
+                    "help_open_html"
+                } else {
+                    "update_download"
+                }))
+                .as_ptr(),
+            );
+            ShowWindow(
+                GetDlgItem(h, 910),
+                if self.document == Document::Guide
+                    || (self.document == Document::Updates
+                        && self.strings["update_url"]
+                            .as_str()
+                            .is_some_and(|s| !s.is_empty()))
+                {
+                    5
+                } else {
+                    0
+                },
+            );
             SetWindowTextW(GetDlgItem(h, 904), wide("").as_ptr());
             SetWindowTextW(GetDlgItem(h, 906), wide("").as_ptr());
             self.end = 0;
             self.query.clear();
+            SetWindowTextW(
+                GetDlgItem(h, 911),
+                wide(&self.t(
+                    if self.strings["update_downloading"].as_bool() == Some(true) {
+                        "update_cancel"
+                    } else {
+                        "update_install"
+                    },
+                ))
+                .as_ptr(),
+            );
+            ShowWindow(
+                GetDlgItem(h, 911),
+                if self.document == Document::Updates
+                    && self.strings["update_can_install"].as_bool() == Some(true)
+                {
+                    5
+                } else {
+                    0
+                },
+            );
+            SetWindowTextW(GetDlgItem(h, 912), wide(&self.t("update_skip")).as_ptr());
+            ShowWindow(
+                GetDlgItem(h, 912),
+                if self.document == Document::Updates
+                    && self.strings["update_url"]
+                        .as_str()
+                        .is_some_and(|s| !s.is_empty())
+                {
+                    5
+                } else {
+                    0
+                },
+            );
+            layout(h);
         }
     }
     unsafe fn section(&self, h: HWND, focus: bool) {
@@ -146,18 +212,32 @@ unsafe fn layout(h: HWND) {
         let dpi = GetDpiForWindow(h).max(96) as i32;
         let s = |x| x * dpi / 96;
         let width = (r.right - s(24)).max(s(240));
-        let content = (r.bottom - s(190)).max(s(50));
+        let extra = if GetWindowLongPtrW(GetDlgItem(h, 910), -16) & 0x10000000 != 0 {
+            s(34)
+        } else {
+            0
+        };
+        let content = (r.bottom - s(190) - extra).max(s(50));
         for (id, x, y, w, height) in [
             (900, s(12), s(8), width, s(20)),
             (901, s(12), s(30), width, s(200)),
-            (907, s(12), s(60), width, s(20)),
-            (902, s(12), s(82), width, content),
-            (908, s(12), s(88) + content, width / 2, s(20)),
-            (904, s(12), s(110) + content, width - s(220), s(24)),
-            (903, r.right - s(215), s(110) + content, s(100), s(26)),
-            (1, r.right - s(108), s(110) + content, s(96), s(26)),
-            (909, s(12), s(141) + content, s(110), s(20)),
-            (906, s(130), s(141) + content, width - s(118), s(24)),
+            (912, s(12), s(60), s(168), s(26)),
+            (910, r.right - s(355), s(60), s(168), s(26)),
+            (911, r.right - s(180), s(60), s(168), s(26)),
+            (907, s(12), s(60) + extra, width, s(20)),
+            (902, s(12), s(82) + extra, width, content),
+            (908, s(12), s(88) + content + extra, width / 2, s(20)),
+            (904, s(12), s(110) + content + extra, width - s(220), s(24)),
+            (
+                903,
+                r.right - s(215),
+                s(110) + content + extra,
+                s(100),
+                s(26),
+            ),
+            (1, r.right - s(108), s(110) + content + extra, s(96), s(26)),
+            (909, s(12), s(141) + content + extra, s(110), s(20)),
+            (906, s(130), s(141) + content + extra, width - s(118), s(24)),
         ] {
             MoveWindow(GetDlgItem(h, id), x, y, w, height, 1);
         }
@@ -184,6 +264,38 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
                 return 0;
             }
             if !ptr.is_null() {
+                if id == 911 && w >> 16 == 0 {
+                    PostMessageW(
+                        GetParent(h),
+                        0x111,
+                        if (&(*ptr).strings)["update_downloading"].as_bool() == Some(true) {
+                            super::updates::CANCEL
+                        } else {
+                            super::updates::INSTALL
+                        },
+                        0,
+                    );
+                    return 0;
+                }
+                if id == 912 && w >> 16 == 0 {
+                    PostMessageW(GetParent(h), 0x111, super::updates::SKIP, 0);
+                    return 0;
+                }
+                if id == 910 && w >> 16 == 0 {
+                    let result = if (*ptr).document == Document::Guide {
+                        open_html(
+                            h,
+                            (&(*ptr).strings)["help_document_language"].as_str() == Some("es"),
+                        )
+                    } else {
+                        super::updates::open_release(h, &(*ptr).t("update_url"))
+                    };
+                    if let Err(e) = result {
+                        SetWindowTextW(GetDlgItem(h, 906), wide(&e).as_ptr());
+                        SetFocus(GetDlgItem(h, 906));
+                    }
+                    return 0;
+                }
                 if id == 903 && w >> 16 == 0 {
                     (*ptr).search(h);
                     return 0;
@@ -196,6 +308,70 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
         }
         DefWindowProcW(h, m, w, l)
     }
+}
+/// Embed both languages so EXE-only updates also update the offline HTML guide.
+fn write_html(folder: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(folder)?;
+    for (name, content) in [
+        (
+            "user-guide.en.html",
+            include_bytes!("../../../docs/user-guide.en.html").as_slice(),
+        ),
+        (
+            "user-guide.es.html",
+            include_bytes!("../../../docs/user-guide.es.html").as_slice(),
+        ),
+    ] {
+        sonitrelix_session::atomic_write(&folder.join(name), content)?;
+    }
+    Ok(())
+}
+unsafe fn open_html(owner: HWND, es: bool) -> Result<(), String> {
+    let folder = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .parent()
+        .ok_or("Cannot locate the portable folder")?
+        .join("data/docs");
+    write_html(&folder).map_err(|e| e.to_string())?;
+    let path = folder.join(if es {
+        "user-guide.es.html"
+    } else {
+        "user-guide.en.html"
+    });
+    let path: Vec<u16> = std::os::windows::ffi::OsStrExt::encode_wide(path.as_os_str())
+        .chain(Some(0))
+        .collect();
+    let result = unsafe {
+        ShellExecuteW(
+            owner,
+            wide("open").as_ptr(),
+            path.as_ptr(),
+            null(),
+            null(),
+            1,
+        )
+    } as isize;
+    if result <= 32 {
+        Err(if es {
+            "No se pudo abrir la guía HTML. Puede seguir leyendo la guía de texto."
+        } else {
+            "Could not open the HTML guide. You can keep reading the text guide."
+        }
+        .into())
+    } else {
+        Ok(())
+    }
+}
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn ShellExecuteW(
+        owner: HWND,
+        operation: *const u16,
+        file: *const u16,
+        parameters: *const u16,
+        directory: *const u16,
+        show: i32,
+    ) -> HWND;
 }
 impl Viewer {
     pub unsafe fn open(
@@ -240,12 +416,15 @@ impl Viewer {
             for (id, class, style) in [
                 (900, "STATIC", 0),
                 (901, "COMBOBOX", 0x10000 | 3 | 0x200000),
+                (912, "BUTTON", 0x10000),
+                (911, "BUTTON", 0x10000),
                 (907, "STATIC", 0),
                 (
                     902,
                     "EDIT",
                     0x10000 | 0x800000 | 0x200000 | 0x800 | 4 | 0x40 | 0x1000,
                 ),
+                (910, "BUTTON", 0x10000),
                 (908, "STATIC", 0),
                 (904, "EDIT", 0x10000 | 0x800000 | 0x80),
                 (903, "BUTTON", 0x10000),
@@ -315,6 +494,9 @@ impl Viewer {
     pub fn focus_id(&self) -> i32 {
         self.context.focus
     }
+    pub fn is_updates(&self) -> bool {
+        self.context.document == Document::Updates
+    }
 }
 impl Drop for Viewer {
     fn drop(&mut self) {
@@ -329,6 +511,9 @@ pub(super) unsafe fn translate(h: HWND, msg: &mut MSG) -> bool {
     unsafe {
         if msg.hwnd != h && IsChild(h, msg.hwnd) == 0 {
             return false;
+        }
+        if tab_from_readonly(h, GetDlgItem(h, 902), msg) {
+            return true;
         }
         if msg.message == 0x100 {
             let ptr = GetWindowLongPtrW(h, -21) as *mut View;
@@ -372,6 +557,26 @@ pub(super) unsafe fn translate(h: HWND, msg: &mut MSG) -> bool {
 mod tests {
     use super::*;
     #[test]
+    fn embedded_html_is_current_and_bilingual_without_browser_launch() {
+        let folder =
+            std::env::temp_dir().join(format!("sonitrelix-guide-{}-á", std::process::id()));
+        write_html(&folder).unwrap();
+        for lang in ["en", "es"] {
+            let path = folder.join(format!("user-guide.{lang}.html"));
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(text.contains(&format!("<html lang=\"{lang}\">")));
+            assert!(text.contains("<caption>"));
+            std::fs::write(path, "old guide").unwrap();
+        }
+        write_html(&folder).unwrap();
+        assert!(
+            std::fs::read_to_string(folder.join("user-guide.en.html"))
+                .unwrap()
+                .contains("<h1>Sonitrelix user guide</h1>")
+        );
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+    #[test]
     fn search_unicode_offsets_and_wrap() {
         assert_eq!(find("voz Ñandú VOZ", "ñANDÚ", 0), Some((4, 9)));
         assert_eq!(find("voz voz", "VOZ", 3), Some((4, 7)));
@@ -399,19 +604,33 @@ mod tests {
             let mut viewer =
                 Viewer::open(owner, super::super::load_strings(false), Document::Guide).unwrap();
             ShowWindow(viewer.hwnd, 0);
-            for id in [901, 902, 904, 903, 1, 906] {
+            for id in [901, 902, 904, 903, 1, 906, 910] {
                 let (name, _) =
                     super::super::accessibility_tests::name_and_role(GetDlgItem(viewer.hwnd, id));
                 assert!(!name.is_empty(), "help control {id}");
             }
             assert!(!viewer.context.sections.is_empty());
+            let tab = MSG {
+                hwnd: GetDlgItem(viewer.hwnd, 902),
+                message: 0x100,
+                wParam: 9,
+                ..MSG::default()
+            };
+            viewer.show(Document::Guide);
+            assert!(tab_from_readonly(viewer.hwnd, tab.hwnd, &tab));
+            assert_eq!(GetFocus(), GetDlgItem(viewer.hwnd, 910));
             SetWindowTextW(GetDlgItem(viewer.hwnd, 904), wide("track").as_ptr());
             viewer.context.search(viewer.hwnd);
             assert!(viewer.context.end > 0);
             viewer.update(super::super::load_strings(true));
             for es in [false, true] {
                 viewer.update(super::super::load_strings(es));
-                for document in [Document::Guide, Document::About, Document::Changelog] {
+                for document in [
+                    Document::Guide,
+                    Document::About,
+                    Document::Changelog,
+                    Document::Updates,
+                ] {
                     viewer.show(document);
                     let content = GetDlgItem(viewer.hwnd, 902);
                     assert_eq!(GetFocus(), content, "initial focus: {document:?}");

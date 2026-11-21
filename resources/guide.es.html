@@ -1,0 +1,199 @@
+<h1>Guía de Sonitrelix</h1>
+<p class="lead">Desde su primera grabación hasta una mezcla multipista. Para Sonitrelix 0.6.0 en Windows.</p>
+<p>Español · <a href="user-guide.en.html" lang="en" hreflang="en">Read in English</a></p>
+<p>Use Sonitrelix para grabar, editar y mezclar audio conservando los archivos originales. Puede cambiar entre español e inglés en Preferencias.</p>
+<nav aria-label="Contenido de la guía"><h2 id="contents">Contenido</h2><ol>
+<li><a href="#beginner">Principiante: primeros pasos</a></li>
+<li><a href="#editing">Principiante: editar y guardar audio</a></li>
+<li><a href="#multitrack">Intermedio: grabar voz sobre música</a></li>
+<li><a href="#effects">Intermedio: efectos y exportación</a></li>
+<li><a href="#preferences">Configurar las preferencias</a></li>
+<li><a href="#advanced">Avanzado: precisión y seguridad del proyecto</a></li>
+<li><a href="#shortcuts">Tablas de atajos de teclado</a></li>
+<li><a href="#problems">Solución de problemas y límites actuales</a></li>
+</ol></nav>
+
+<section aria-labelledby="beginner"><h2 id="beginner">1. Principiante: primeros pasos</h2>
+<h3 id="install">Extraer y abrir la aplicación portable</h3>
+<ol><li>Extraiga el ZIP portable en una carpeta con permisos de escritura, por ejemplo dentro de Documentos. No ejecute el programa desde el interior del ZIP.</li><li>Abra la carpeta extraída y ejecute <strong>Sonitrelix.exe</strong>. Conserve los archivos que lo acompañan.</li><li>Use <kbd>Tab</kbd> y <kbd>Mayús+Tab</kbd> para recorrer los controles. Pulse Alt para acceder a los menús y use las flechas para recorrerlos.</li></ol>
+<p>La carpeta <strong>data</strong>, junto al ejecutable, contiene preferencias, registros y audio generado. Borrarla puede eliminar audio necesario para sus proyectos.</p>
+<h3 id="read-guide">Leer esta guía sin ratón</h3>
+<p>Pulse F1 en Sonitrelix para abrir la guía de solo lectura. Pulse Tab desde el texto de la guía hasta <strong>Abrir guía HTML</strong> y después Intro para abrirla en el navegador. En el visor de texto, elija una sección y pulse Intro; Ctrl+F busca, F3 encuentra la siguiente coincidencia y Escape cierra.</p>
+<p>En el navegador, use los enlaces del contenido o las teclas de encabezados y tablas de su lector en modo exploración. Ctrl+F busca texto. Alt+Tab vuelve a Sonitrelix.</p>
+<h3 id="window">Comprender pistas, fragmentos y foco</h3>
+<dl><dt>Proyecto</dt><dd>La organización guardada de pistas y referencias a su audio.</dd><dt>Pista</dt><dd>Una secuencia de fragmentos y silencios con nombre, silencio, solo, armado, volumen y panorama.</dd><dt>Fragmento</dt><dd>Una región que hace referencia a parte de un archivo, o una región de silencio.</dd><dt>Cursor</dt><dd>El punto donde comienza la reproducción o una edición.</dd><dt>Selección</dt><dd>Un inicio y un final que delimitan el audio que desea editar.</dd></dl>
+<p>La ventana contiene menús, controles de transporte, listas Pistas y Fragmentos, campos de tiempo editables y lecturas de estado. Arriba/Abajo elige un elemento de la lista. La mayoría de los atajos de audio exige el foco en <strong>Pistas o Fragmentos</strong>. En un campo de texto, Ctrl+A/C/X/V edita texto.</p>
+<h3 id="devices">Elegir micrófono y auriculares</h3>
+<ol><li>Pulse Ctrl+, para abrir Herramientas &gt; Preferencias.</li><li>Use Ctrl+Tab hasta <strong>Dispositivos de audio</strong>.</li><li>Elija entrada y salida por separado. Actualice la lista después de conectar un dispositivo.</li><li>En <strong>Grabación / reproducción</strong>, elija canales y búfer. Haga coincidir mono/estéreo con una pista existente donde vaya a grabar.</li><li>Aplicar guarda sin cerrar; Aceptar guarda y cierra; Cancelar descarta lo que aún no haya aplicado.</li></ol>
+<p>Use auriculares para grabar sobre música. Puede oír el acompañamiento durante la grabación. La monitorización en directo del micrófono no está disponible.</p>
+<h3 id="first-playback">Importar y escuchar un archivo</h3>
+<ol><li>Pulse Ctrl+I, elija un archivo de audio en el diálogo estándar y ábralo.</li><li>Espere a que termine la importación. El audio comprimido se convierte en un archivo WAV en segundo plano.</li><li>Enfoque Pistas o Fragmentos y pulse Espacio para reproducir la mezcla audible.</li><li>Ctrl+Espacio pausa o continúa; Espacio detiene. F6 enfoca la lectura del transporte.</li></ol>
+<p>Ctrl+I abre WAV, MP3, FLAC y AAC en M4A con los importadores integrados. Escape cancela una importación activa desde la ventana principal.</p>
+<h3 id="ffmpeg-setup">Formatos y efectos adicionales con FFmpeg</h3>
+<p>El ZIP oficial para Windows incluye <code>ffmpeg.exe</code> junto a <code>Sonitrelix.exe</code>. Si compila Sonitrelix, coloque una compilación compatible de FFmpeg para Windows junto al programa o en PATH. Con FFmpeg, Ctrl+I también admite Ogg Vorbis, Opus y AIFF. Al elegir un vídeo compatible, se importa su primera pista de audio.</p>
+<h3 id="first-recording">Hacer una primera grabación de voz</h3>
+<ol><li>Pulse Ctrl+N para crear un proyecto. Guarde el anterior si se le solicita.</li><li>Ctrl+Mayús+N añade una pista vacía. En Pistas, F2 permite escribir su nombre; Intro lo confirma.</li><li>Con la pista elegida, A la arma para grabar. Inicio coloca el cursor en cero.</li><li>Pulse R y hable al micrófono seleccionado. F6 consulta el transporte.</li><li>Ctrl+Espacio pausa o continúa. Pulse Espacio para finalizar la toma. R también la finaliza cuando Pistas o Fragmentos tiene el foco.</li><li>Vuelva a Pistas o Fragmentos, pulse Espacio para escuchar la toma desde su inicio.</li></ol>
+<p>Las tomas se guardan como WAV en data/recordings. Consérvelas aunque ya haya guardado el proyecto. Si aparece un error, revise y guarde el audio completado antes de repetir.</p>
+</section>
+
+<section aria-labelledby="editing"><h2 id="editing">2. Principiante: editar y guardar audio</h2>
+<h3 id="time-selection">Introducir posición y selección exactas</h3>
+<p>El formato es <code>horas:minutos:segundos.milisegundos</code>. Por ejemplo, <code>00:01:15.000</code> representa 1 minuto y 15 segundos. Elija la pista, recorra con Tab los campos Posición o inicio/final de selección, escriba los valores y active <strong>Aplicar tiempos</strong>.</p>
+<p>Para seleccionar desde 1 minuto 15 segundos hasta 1 minuto 28,5 segundos, introduzca <code>00:01:15.000</code> y <code>00:01:28.500</code>. F7 enfoca la lectura de selección. Vuelva a Pistas/Fragmentos antes de usar atajos de edición de audio.</p>
+<p>También puede mover el cursor con Izquierda/Derecha; Mayús amplía la selección y Ctrl usa el paso grande. Los pasos se configuran en Preferencias. Intro en Fragmentos selecciona el fragmento completo con límites exactos de muestras. Escape en Pistas/Fragmentos quita la selección.</p>
+<p>Con el foco en Pistas o Fragmentos, pulse <kbd>[</kbd> en el inicio. Avance o deje reproducir hasta el final y pulse <kbd>]</kbd>. Durante la reproducción se usa la posición de escucha. Pulse F7 para consultar el intervalo y vuelva a Pistas o Fragmentos. Ctrl+E abre Efectos para el intervalo, Supr lo elimina y Ctrl+Mayús+X lo exporta.</p>
+<h3 id="cut-copy">Copiar, cortar, pegar y eliminar</h3>
+<ol><li>Seleccione un intervalo de audio.</li><li>Ctrl+C copia; Ctrl+X corta y cierra el hueco.</li><li>Elija la pista de destino y su posición. Ctrl+V pega y desplaza el audio posterior para hacer sitio.</li><li>Ctrl+Z deshace; Ctrl+Y rehace fuera de los campos de texto.</li></ol>
+<p>Pegar sustituye una selección activa. Quítela con Escape primero si desea insertar en el cursor. El portapapeles de audio es interno y no intercambia audio con otras aplicaciones. Pegar entre pistas no vacías requiere formato compatible de canales y frecuencia; una pista vacía puede adoptar el formato copiado.</p>
+<p>Ctrl+A selecciona todo el audio de la pista elegida, no todas las pistas. Ctrl+A seguido de Ctrl+X corta todo su audio. Supr elimina la selección y cierra el hueco; no borra el archivo original.</p>
+<h3 id="split-trim">Dividir, recortar e insertar silencio</h3>
+<ul><li><strong>Dividir en el cursor</strong> (Ctrl+T) crea un límite sin quitar audio.</li><li><strong>Recortar a la selección</strong> (Ctrl+Mayús+T) conserva solo el intervalo seleccionado.</li><li><strong>Silenciar selección</strong> (Ctrl+L) sustituye el intervalo por silencio conservando su duración.</li><li><strong>Insertar silencio</strong> (Ctrl+Mayús+I) añade silencio en el cursor y desplaza lo posterior. Dura lo mismo que la selección, o un segundo si no hay intervalo.</li></ul>
+<h3 id="save">Guardar un proyecto o crear un archivo de audio</h3>
+<p>Ctrl+S guarda un <strong>proyecto .sonitrelix</strong>; Ctrl+Mayús+S lo guarda con otro nombre. El proyecto conserva la organización y referencias: no es una mezcla reproducible ni contiene el audio dentro.</p>
+<p>Ctrl+Mayús+E exporta la mezcla audible a un archivo para compartir. Guarde también el proyecto para seguir editando. Al reabrir no se recuperan el historial de deshacer ni la posición y selección actuales.</p>
+</section>
+
+<section aria-labelledby="multitrack"><h2 id="multitrack">3. Intermedio: grabar voz sobre música</h2>
+<h3 id="backing-track">Preparar acompañamiento y voz</h3>
+<ol><li>Importe la instrumental con Ctrl+I. Elija su pista, pulse F2 y nómbrela Instrumental.</li><li>Ctrl+Mayús+N añade otra pista; nómbrela Voz.</li><li>Compruebe entrada/salida en Preferencias y póngase auriculares.</li><li>Elija Voz y pulse A para armarla. La instrumental debe ser audible: ni silenciada ni excluida por solo.</li><li>Coloque el cursor en el inicio deseado y pulse R para grabar mientras suenan las otras pistas audibles.</li><li>Ctrl+Espacio pausa o continúa ambos flujos. R o Espacio termina la toma y aparece el fragmento grabado.</li></ol>
+<p>Se graba una pista de destino cada vez. Su audio anterior se excluye del acompañamiento. La toma sustituye el intervalo de destino sin desplazar el audio posterior; si comienza más tarde, se añade el silencio previo necesario.</p>
+<h3 id="balance">Equilibrar y organizar pistas</h3>
+<p>En Pistas/Fragmentos, M alterna silencio, S solo y A armado. El modo solo se guarda por pista. Si hay pistas con audio en solo y sin silenciar, la mezcla reproduce esas pistas juntas. Una pista vacía o silenciada en solo no silencia las demás pistas.</p>
+<p>El silencio y el solo se aplican durante la reproducción. El cursor sigue avanzando aunque todas las pistas estén en silencio. A, S y M mantienen el foco en la pista. Al activar solo, el estado también indica si la pista está silenciada o vacía, o si hay varias pistas en solo.</p>
+<p>Ctrl+G abre <strong>Volumen y panorama</strong>. Escriba un valor o use el deslizador. El volumen admite de −60 a +24 dB. El panorama va de −100 a la izquierda a +100 a la derecha, con 0 en el centro. Los botones Restablecer devuelven el volumen a 0 dB o el panorama al centro. Pulse Aceptar y escuche la mezcla.</p>
+<p>Ctrl+Mayús+D duplica la pista. Alt+Mayús+Arriba/Abajo la reordena. Ctrl+Mayús+Supr la elimina del proyecto. Deshacer la restaura; los archivos de origen permanecen en disco.</p>
+</section>
+
+<section aria-labelledby="effects"><h2 id="effects">4. Intermedio: efectos y exportación</h2>
+<h3 id="effect-workflow">Escuchar y aplicar un efecto</h3>
+<ol><li>Elija una pista y, opcionalmente, un intervalo. Sin intervalo, se procesa la pista completa.</li><li>Ctrl+E abre Efectos. Elija el efecto y ajuste sus valores.</li><li>Escuchar reproduce una prueba corta. Detenga la prueba antes de otra comparación.</li><li>Aplicar procesa en segundo plano; Cancelar cierra sin aplicar una edición nueva.</li><li>Escuche el resultado. Ctrl+Z recupera el audio anterior si lo necesita.</li></ol>
+<p>Los efectos generan audio nuevo sin reescribir originales. Son ediciones procesadas que se pueden deshacer, no una cadena de complementos en directo. Escuche el resultado completo antes de exportar.</p>
+<dl><dt>Amplificar y Normalizar</dt><dd>Cambian el nivel. Comience con cambios pequeños. Normalizar ajusta un pico, no la sonoridad percibida.</dd><dt>Fundido de entrada y salida</dt><dd>Aumentan o reducen el nivel a lo largo de la región.</dd><dt>Invertir y Silencio</dt><dd>Invierten el orden de las muestras o sustituyen la región por silencio.</dd><dt>Ecualizador básico</dt><dd>Ajusta graves, medios y agudos.</dd><dt>Compresor</dt><dd>Reduce picos por encima de un umbral. Compare a un nivel de escucha parecido.</dd><dt>Puerta de ruido</dt><dd>Reduce pasajes por debajo del umbral. Un ajuste agresivo puede quitar palabras suaves.</dd><dt>Reverberación</dt><dd>Añade ambiente reverberante. Pruebe poca cantidad para conservar la claridad de la voz.</dd></dl>
+<p>En Efectos y Volumen y panorama, Tab lleva desde cada campo numérico a su botón Restablecer y después al deslizador. Use las flechas para ajustes pequeños o RePág y AvPág para cambios mayores. Escriba en el campo numérico para ajustar valores exactos.</p>
+<p>Active Restablecer con Espacio para recuperar el valor predeterminado de ese ajuste. Se actualizan el campo y el deslizador. Pulse Aplicar en Efectos o Aceptar en Volumen y panorama para confirmar los cambios.</p>
+<h3 id="ffmpeg-effects">Limpiar la voz y ajustar el tempo con FFmpeg</h3>
+<p>Ctrl+E ofrece Reducción de ruido para ruido constante, Reductor de sibilancia para eses fuertes, Eliminar zumbido de 50 o 60 Hz y Cambiar tempo sin alterar el tono. Cambiar tempo desplaza el audio posterior en la pista editada. Use Escuchar, Aplicar y Ctrl+Z.</p>
+<p>Para la Atenuación automática, seleccione el acompañamiento y elija la voz de control en Efectos. La voz atenúa el acompañamiento en los momentos correspondientes. La escucha previa reproduce solo el acompañamiento procesado. Aplicar se puede deshacer. Reproduzca el proyecto para oír ambas pistas.</p>
+<p>La reducción estima el ruido de fondo en los momentos más silenciosos. Incluya una breve pausa con el ruido constante que desea reducir.</p>
+<h3 id="export">Exportar la mezcla</h3>
+<ol><li>Escuche el proyecto y compruebe silencio, solo, volumen y panorama.</li><li>En Preferencias &gt; Exportación elija frecuencia, canales mono/estéreo y tasa MP3. Aplique los cambios.</li><li>Ctrl+Mayús+E abre la exportación. Elija formato, nombre y destino. FFmpeg permite AAC en M4A a 192 kbps y Opus a 128 kbps y 48 kHz. También puede codificar MP3 si Windows no puede iniciar su codificador.</li><li>Espere. Escape en la ventana principal cancela la exportación activa sin dañar un destino existente.</li><li>Reabra el resultado y verifique sonido, duración y canales.</li></ol>
+<p>Se exporta toda la mezcla audible, no solo la selección o pista elegida. Para un extracto, elija Archivo &gt; Exportar audio de la selección (Ctrl+Mayús+X). Exporta solo el intervalo de la pista, con su volumen y panorama, independientemente de silencio y solo. Los originales importados están protegidos contra sobrescritura.</p>
+<p>WAV y FLAC se exportan como PCM16. FLAC conserva esas muestras, aunque puede comprimir menos que otros codificadores. MP3 puede añadir relleno al codificar. Use WAV o FLAC para conservar la duración exacta. Sonitrelix usa FFmpeg para MP3 si el codificador de Windows no puede iniciarse y FFmpeg está disponible.</p>
+</section>
+
+<section aria-labelledby="preferences"><h2 id="preferences">5. Configurar las preferencias</h2>
+<p>Ctrl+, abre Herramientas &gt; Preferencias. Ctrl+Tab y Ctrl+Mayús+Tab cambian categoría; Tab recorre controles. F1 o Ctrl+H abre la ayuda de categoría mientras Preferencias está activo.</p>
+<ul><li><strong>General:</strong> idioma, frecuencia de proyectos nuevos y comprobación de actualizaciones.</li><li><strong>Dispositivos de audio:</strong> entrada/salida independientes y actualización de la lista.</li><li><strong>Grabación / reproducción:</strong> canales, búfer y desplazamiento manual. La monitorización no está disponible.</li><li><strong>Edición / teclado:</strong> pasos del cursor y Atajos de teclado.</li><li><strong>Accesibilidad:</strong> lectura detallada de tiempos y opciones disponibles de foco/estado.</li><li><strong>Exportación:</strong> frecuencia de salida, canales y tasa MP3.</li></ul>
+<h3 id="custom-keys">Personalizar los atajos</h3>
+<p>En Edición / teclado, abra Atajos de teclado, elija una acción e introduzca una combinación. Puede cambiar acciones de edición, pistas, efectos y transporte. Aplicar en Preferencias guarda. Se rechazan conflictos y combinaciones reservadas; las teclas globales de proyecto y ayuda permanecen fijas.</p>
+<p>Las tablas muestran valores predeterminados. Si los cambia, use los de sus preferencias. Las letras simples se usan en Pistas/Fragmentos, no mientras escribe texto. Cambiar el idioma no cambia las combinaciones físicas.</p>
+</section>
+
+<section aria-labelledby="advanced"><h2 id="advanced">6. Avanzado: precisión y seguridad del proyecto</h2>
+<h3 id="alignment">Compensar el retraso de grabación</h3>
+<p>Si la voz queda tarde, pruebe un desplazamiento negativo en milisegundos en Grabación / reproducción. Los valores positivos colocan la toma más tarde; los negativos, antes, sin pasar del inicio del proyecto. El intervalo permitido es de −2000 a +2000 milisegundos.</p>
+<ol><li>Grabe una palmada breve siguiendo una señal conocida del acompañamiento con auriculares.</li><li>Compare el momento, ajuste el desplazamiento y haga una toma nueva.</li><li>Repita al cambiar dispositivo o búfer. Pruebe también pausa/continuación y una toma larga.</li></ol>
+<p>El ajuste afecta a tomas nuevas, no a fragmentos anteriores. Se coordinan los inicios de los flujos, pero no se mide automáticamente la latencia ni se corrige la deriva. Las pistas pueden tener frecuencias distintas y se remuestrean al reproducir/exportar; las reglas de copiar/pegar son independientes.</p>
+<h3 id="asset-safety">Conservar proyecto y audio</h3>
+<p>Haga copia del proyecto .sonitrelix, los originales y las carpetas de audio generado de data. Guardar como cambia el nombre del proyecto, no mueve el audio. Mover o renombrar un archivo referenciado puede impedir reproducirlo. No hay reenlace automático ni paquete de proyecto autosuficiente.</p>
+<p>Los fragmentos son regiones consecutivas con huecos de silencio. Se admiten división y ediciones que desplazan lo posterior, pero no mover libremente fragmentos superpuestos. Duplique la pista para probar otra organización.</p>
+<h3 id="recovery">Recuperar cambios sin guardar</h3>
+<p>Mientras hay cambios, se guarda un punto de recuperación de metadatos aproximadamente cada 30 segundos. Tras un cierre anormal, el arranque puede ofrecer recuperar una instancia que ya terminó. Revise lo recuperado y guarde un proyecto con nombre. No se garantizan grabaciones incompletas ni recuperación tras pérdida de energía.</p>
+<p>Archivo &gt; Proyectos recientes conserva hasta diez rutas. Una ruta inexistente produce error; no restaura su audio.</p>
+<h3 id="updates">Buscar e instalar actualizaciones</h3>
+<p>Ayuda &gt; Buscar actualizaciones consulta versiones estables de GitHub. Un paquete portable solo instala una versión nueva si verifica manifiesto firmado y ejecutable. Guarde y detenga la grabación primero. Omitir versión suprime ofertas automáticas; una consulta manual puede volver a ofrecerla.</p>
+<p>Se conserva data y una copia del ejecutable. Si falla el arranque nuevo, se restaura la anterior. General permite desactivar consultas diarias. Las compilaciones sin marcador portable ofrecen descarga manual.</p>
+</section>
+
+<section aria-labelledby="shortcuts"><h2 id="shortcuts">7. Tablas de atajos de teclado</h2>
+<p>Son combinaciones predeterminadas. Las de audio y pistas necesitan foco en Pistas/Fragmentos salvo que se indique otra cosa. Las teclas de lectura del navegador solo actúan en este HTML.</p>
+<h3 id="keys-project">Proyecto y navegación</h3>
+<table><caption>Atajos de proyecto en la ventana principal</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Ctrl+N">Ctrl+N</th><td>Nuevo proyecto; solicita guardar si hay cambios.</td></tr>
+<tr><th scope="row" data-key="Ctrl+O">Ctrl+O</th><td>Abrir proyecto, no importar audio.</td></tr>
+<tr><th scope="row" data-key="Ctrl+S">Ctrl+S</th><td>Guardar proyecto.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+S">Ctrl+Mayús+S</th><td>Guardar proyecto con otro nombre.</td></tr>
+<tr><th scope="row" data-key="Ctrl+I">Ctrl+I</th><td>Importar audio.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+E">Ctrl+Mayús+E</th><td>Exportar la mezcla audible.</td></tr>
+<tr><th scope="row" data-key="Ctrl+,">Ctrl+,</th><td>Abrir Preferencias.</td></tr>
+<tr><th scope="row" data-key="F1">F1</th><td>Abrir guía; en Preferencias, ayuda de categoría.</td></tr>
+<tr><th scope="row" data-key="F6">F6</th><td>Enfocar lectura de transporte.</td></tr>
+<tr><th scope="row" data-key="F7">F7</th><td>Enfocar lectura de selección.</td></tr>
+<tr><th scope="row">Tab / Mayús+Tab</th><td>Control siguiente / anterior.</td></tr>
+<tr><th scope="row">Arriba / Abajo</th><td>Elegir pista o fragmento en la lista enfocada.</td></tr>
+<tr><th scope="row">Alt+F4</th><td>Cerrar ventana con el comando estándar de Windows; solicita guardar si procede.</td></tr>
+</tbody></table>
+<h3 id="keys-transport">Reproducción y grabación</h3>
+<table><caption>Transporte en Pistas/Fragmentos; Espacio y Ctrl+Espacio también funcionan en la lectura del transporte</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Space">Espacio</th><td>Reproducir/detener mezcla; detener grabación activa.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Space">Ctrl+Espacio</th><td>Pausar/continuar reproducción o grabación con acompañamiento.</td></tr>
+<tr><th scope="row" data-key="R">R</th><td>Iniciar/detener grabación en la pista armada.</td></tr>
+</tbody></table>
+<h3 id="keys-edit">Edición de audio</h3>
+<table><caption>Edición con foco en Pistas/Fragmentos</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Ctrl+Z">Ctrl+Z</th><td>Deshacer fuera de campos de texto.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Y">Ctrl+Y</th><td>Rehacer fuera de campos de texto.</td></tr>
+<tr><th scope="row">[ / ]</th><td>Marcar el inicio / fin de selección en la posición actual.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+X">Ctrl+Mayús+X</th><td>Exportar el intervalo seleccionado de la pista actual.</td></tr>
+<tr><th scope="row" data-key="Ctrl+A">Ctrl+A</th><td>Seleccionar todo el audio de la pista elegida.</td></tr>
+<tr><th scope="row" data-key="Ctrl+C">Ctrl+C</th><td>Copiar audio al portapapeles interno.</td></tr>
+<tr><th scope="row" data-key="Ctrl+X">Ctrl+X</th><td>Cortar selección cerrando el hueco.</td></tr>
+<tr><th scope="row" data-key="Ctrl+V">Ctrl+V</th><td>Pegar audio en el cursor.</td></tr>
+<tr><th scope="row">Ctrl+A y después Ctrl+X</th><td>Cortar todo el audio de la pista elegida.</td></tr>
+<tr><th scope="row" data-key="Delete">Supr</th><td>Eliminar selección cerrando el hueco.</td></tr>
+<tr><th scope="row" data-key="Ctrl+T">Ctrl+T</th><td>Dividir el fragmento en el cursor.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+T">Ctrl+Mayús+T</th><td>Conservar solo el intervalo seleccionado.</td></tr>
+<tr><th scope="row" data-key="Ctrl+L">Ctrl+L</th><td>Silenciar selección sin cambiar duración.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+I">Ctrl+Mayús+I</th><td>Insertar silencio: duración seleccionada o un segundo.</td></tr>
+<tr><th scope="row" data-key="Ctrl+E">Ctrl+E</th><td>Abrir Efectos para la selección o pista completa.</td></tr>
+<tr><th scope="row">Intro en Fragmentos</th><td>Seleccionar el fragmento completo con límites exactos.</td></tr>
+<tr><th scope="row">Escape en Pistas/Fragmentos</th><td>Quitar la selección de audio.</td></tr>
+</tbody></table>
+<h3 id="keys-time">Movimiento del cursor y selección</h3>
+<table><caption>Tiempos con foco en Pistas/Fragmentos</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
+<tr><th scope="row">Izquierda / Derecha</th><td>Mover cursor hacia atrás/adelante por paso pequeño.</td></tr>
+<tr><th scope="row">Ctrl+Izquierda / Ctrl+Derecha</th><td>Mover cursor por paso grande.</td></tr>
+<tr><th scope="row">Mayús+Izquierda / Mayús+Derecha</th><td>Ampliar selección por paso pequeño.</td></tr>
+<tr><th scope="row">Ctrl+Mayús+Izquierda / Ctrl+Mayús+Derecha</th><td>Ampliar selección por paso grande.</td></tr>
+<tr><th scope="row">Inicio / Fin</th><td>Ir al inicio/final de la pista elegida.</td></tr>
+<tr><th scope="row">Mayús+Inicio / Mayús+Fin</th><td>Ampliar selección hasta inicio/final de pista.</td></tr>
+</tbody></table>
+<h3 id="keys-tracks">Gestión de pistas</h3>
+<table><caption>Pistas con foco en Pistas/Fragmentos, salvo añadir pista que es global</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Ctrl+Shift+N">Ctrl+Mayús+N</th><td>Añadir pista vacía.</td></tr>
+<tr><th scope="row" data-key="F2">F2</th><td>Renombrar; Intro confirma, Escape cancela.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+D">Ctrl+Mayús+D</th><td>Duplicar pista.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+Delete">Ctrl+Mayús+Supr</th><td>Eliminar pista del proyecto.</td></tr>
+<tr><th scope="row" data-key="Alt+Shift+Up">Alt+Mayús+Arriba</th><td>Subir pista.</td></tr>
+<tr><th scope="row" data-key="Alt+Shift+Down">Alt+Mayús+Abajo</th><td>Bajar pista.</td></tr>
+<tr><th scope="row" data-key="M">M</th><td>Alternar silencio.</td></tr>
+<tr><th scope="row" data-key="S">S</th><td>Alternar solo.</td></tr>
+<tr><th scope="row" data-key="A">A</th><td>Alternar armado para grabación.</td></tr>
+<tr><th scope="row" data-key="Ctrl+G">Ctrl+G</th><td>Abrir Volumen y panorama.</td></tr>
+</tbody></table>
+<h3 id="keys-dialogs">Preferencias y visor de ayuda</h3>
+<table><caption>Teclas específicas de Preferencias o ayuda de texto</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
+<tr><th scope="row">Ctrl+Tab / Ctrl+Mayús+Tab</th><td>Categoría siguiente / anterior de Preferencias.</td></tr>
+<tr><th scope="row">F1 / Ctrl+H en Preferencias</th><td>Abrir ayuda de categoría.</td></tr>
+<tr><th scope="row">Ctrl+F en Ayuda</th><td>Enfocar Buscar.</td></tr>
+<tr><th scope="row">F3 en Ayuda</th><td>Buscar la coincidencia siguiente.</td></tr>
+<tr><th scope="row">Intro en secciones / búsqueda</th><td>Leer la sección elegida / buscar.</td></tr>
+<tr><th scope="row">Ctrl+A / Ctrl+C en el contenido</th><td>Seleccionar / copiar texto de solo lectura.</td></tr>
+<tr><th scope="row">Escape en Ayuda / Preferencias</th><td>Cerrar ayuda / cancelar preferencias sin aplicar.</td></tr>
+<tr><th scope="row">Escape al exportar en la ventana principal</th><td>Solicitar cancelación de exportación.</td></tr>
+</tbody></table>
+</section>
+
+<section aria-labelledby="problems"><h2 id="problems">8. Solución de problemas y límites actuales</h2>
+<h3 id="no-sound">No se oye audio o no entra micrófono</h3>
+<p>Revise volumen de Windows, permisos de privacidad del micrófono y entrada/salida seleccionadas. Actualice la lista tras reconectar USB. Compruebe silencio/solo al reproducir y pista armada/canales al grabar. Si el micrófono elegido se desconecta, vuelva a conectarlo o elija otra entrada en Preferencias antes de repetir.</p>
+<h3 id="keys-not-working">Un atajo escribe texto o no responde</h3>
+<p>Vuelva con Tab a Pistas/Fragmentos y revise las combinaciones personalizadas. Si lee el HTML, Alt+Tab vuelve al editor. En campos de texto, escribir y usar el portapapeles conserva el comportamiento de Windows.</p>
+<h3 id="missing-audio">Un proyecto no encuentra audio</h3>
+<p>Restaure el archivo en su ruta guardada desde una copia. Guardar como no reúne los archivos. No borre data/recordings o data/imports porque el proyecto ya esté guardado.</p>
+<h3 id="format-error">Falla importar o exportar</h3>
+<p>Pruebe un WAV admitido y una carpeta con escritura. Revise espacio libre y componentes multimedia de Windows. Para MP3 use una combinación admitida de frecuencia, tasa y canales. Conserve originales y no intente resolverlo sobrescribiéndolos.</p>
+<h3 id="report">Informar de un problema</h3>
+<p>Indique versión de Ayuda &gt; Acerca de, Windows, lector/versión, dispositivos, teclas exactas y mensaje de error. Los errores se guardan en data/error.log, en la carpeta data junto al ejecutable. El registro de eventos está en data/session.jsonl. Revíselo antes de compartir: puede incluir rutas personales. No comparta grabaciones privadas ni claves de firma.</p>
+<p>Para consultar cambios recientes o información de la versión, abra <strong>Registro de cambios</strong> o <strong>Acerca de</strong> en Ayuda.</p>
+</section>

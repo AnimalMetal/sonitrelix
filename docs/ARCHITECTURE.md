@@ -1,4 +1,10 @@
-# Architecture decisions — current build 0.4.0
+# Additions - 0.6.0
+
+The mixer crate builds immutable mixed timelines. Worker-side windowed-sinc resampling converts track rates. StartGate coordinates capture/output starts and resumes; latency offset remains manual. Media Foundation converts compressed imports to WAV and encodes MP3; WAV/FLAC encoding is original. Schema 4 protects original compressed paths. Maintenance workers save recovery/recents. The updater verifies Ed25519 manifests and downloads, replaces only the EXE and rolls back failed startup. See MULTITRACK.md and UPDATES.md.
+
+## Historical notes
+
+# Architecture decisions — current build 0.5.0
 
 ## Reference review
 
@@ -22,7 +28,7 @@ Preview streams one selected timeline through a background source reader, bounde
 
 UI receives worker results through channels/polling; file decode, discovery, recording writes and preference saves run off the UI thread. Native modal guards prevent project mutations during dialogs. Starting recording stops preview and blocks audio/project mutations until finalization. Closing finalizes capture before prompting about unsaved changes. Assets are retained on undo.
 
-Future crates/features: multitrack block mixer with resampling, effects chains, additional codecs, mixdown/export and project recovery. A manual signed insertion offset is available; measured overdub latency is future work.
+The effects crate now supplies bounded offline processors, including feedback-delay reverb, and renders immutable float32 assets with undoable project replacement. Windows UI has one modal parameter window with worker rendering and preview. A separate WinHTTP release checker reads public GitHub metadata in a worker, then offers the official download page; it never downloads or installs executable files. See EFFECTS_UPDATES.md. Future features: multitrack block mixer with resampling, editable effect chains, additional codecs, mixdown/export, signed automatic installation and project recovery. A manual signed insertion offset is available; measured overdub latency is future work.
 
 ## Audio plan and candidate evaluation
 

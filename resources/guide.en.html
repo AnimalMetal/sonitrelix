@@ -1,0 +1,199 @@
+<h1>Sonitrelix user guide</h1>
+<p class="lead">From your first recording to a multitrack mix. For Sonitrelix 0.6.0 on Windows.</p>
+<p>English · <a href="user-guide.es.html" lang="es" hreflang="es">Leer en español</a></p>
+<p>Use Sonitrelix to record, edit and mix audio while preserving your original files. You can switch between English and Spanish in Preferences.</p>
+<nav aria-label="Guide contents"><h2 id="contents">Contents</h2><ol>
+<li><a href="#beginner">Beginner: get started</a></li>
+<li><a href="#editing">Beginner: edit and save audio</a></li>
+<li><a href="#multitrack">Intermediate: record vocals over music</a></li>
+<li><a href="#effects">Intermediate: apply effects and export</a></li>
+<li><a href="#preferences">Set up your preferences</a></li>
+<li><a href="#advanced">Advanced: precise timing and project safety</a></li>
+<li><a href="#shortcuts">Keyboard shortcut tables</a></li>
+<li><a href="#problems">Troubleshooting and current limits</a></li>
+</ol></nav>
+
+<section aria-labelledby="beginner"><h2 id="beginner">1. Beginner: get started</h2>
+<h3 id="install">Extract and start the portable application</h3>
+<ol><li>Extract the portable ZIP to a writable folder, such as a folder in Documents. Do not run the application from inside the ZIP.</li><li>Open the extracted folder and run <strong>Sonitrelix.exe</strong>. Keep its accompanying files together.</li><li>Use <kbd>Tab</kbd> and <kbd>Shift+Tab</kbd> to move between controls. Use <kbd>Alt</kbd> to reach the menu bar and arrow keys to browse menus.</li></ol>
+<p>Sonitrelix stores settings, logs and generated audio in a <strong>data</strong> folder beside the executable. Deleting that folder can delete audio used by your projects.</p>
+<h3 id="read-guide">Read this guide without a mouse</h3>
+<p>Press <kbd>F1</kbd> in Sonitrelix to open the read-only user guide. Press Tab from the guide text to <strong>Open HTML guide</strong>, then press Enter to open it in your browser. In the text viewer, choose a section and press Enter; use Ctrl+F to find text, F3 for the next result, and Escape to close.</p>
+<p>In the browser, use the contents links or your screen reader’s heading and table shortcuts in browse mode. Ctrl+F finds text. Alt+Tab returns to Sonitrelix.</p>
+<h3 id="window">Understand tracks, clips and focus</h3>
+<dl><dt>Project</dt><dd>The saved arrangement of tracks and references to their audio.</dd><dt>Track</dt><dd>A named sequence of audio clips and silence. Each track has mute, solo, recording-arm, volume and pan settings.</dd><dt>Clip</dt><dd>A region referring to part of a source recording, or an explicit silence region.</dd><dt>Cursor</dt><dd>The position where playback or an edit starts.</dd><dt>Selection</dt><dd>A start and end time defining the audio you want to edit.</dd></dl>
+<p>The main window has menus, transport controls, a Tracks list, a Clips list, editable time fields and readouts. Use Up/Down in a list to choose a track or clip. Most audio shortcuts work only while <strong>Tracks or Clips has focus</strong>. In a text field, Ctrl+A/C/X/V edit text instead of audio.</p>
+<h3 id="devices">Choose your microphone and headphones</h3>
+<ol><li>Press <kbd>Ctrl+,</kbd> to open Tools &gt; Preferences.</li><li>Use Ctrl+Tab to reach <strong>Audio devices</strong>.</li><li>Select the input microphone and output device independently. Use the refresh control after connecting a device.</li><li>In <strong>Recording / playback</strong>, choose recording channels and buffering. Match mono/stereo to an existing track you plan to record into.</li><li>Choose Apply to save while keeping Preferences open, or OK to save and close. Cancel discards changes you have not applied.</li></ol>
+<p>Use headphones when recording over music. You can hear the backing track during recording. Live microphone monitoring is unavailable.</p>
+<h3 id="first-playback">Import and hear an audio file</h3>
+<ol><li>Press <kbd>Ctrl+I</kbd>, choose an audio file in the standard file dialog, and open it.</li><li>Wait for import to finish. Compressed audio is converted into a WAV asset in the background.</li><li>Focus Tracks or Clips. Press <kbd>Space</kbd> to play the audible project mix.</li><li>Press <kbd>Ctrl+Space</kbd> to pause/resume, or Space to stop. Press F6 to focus the transport readout.</li></ol>
+<p>Ctrl+I opens WAV, MP3, FLAC and AAC in M4A using the built-in importers. Escape cancels an active import from the main window.</p>
+<h3 id="ffmpeg-setup">Extra formats and effects with FFmpeg</h3>
+<p>The official Windows ZIP includes <code>ffmpeg.exe</code> beside <code>Sonitrelix.exe</code>. If you build Sonitrelix yourself, place a compatible Windows FFmpeg build beside it or on PATH. With FFmpeg available, Ctrl+I also handles Ogg Vorbis, Opus and AIFF. Choosing a supported video file imports its first audio stream.</p>
+<h3 id="first-recording">Make a simple voice recording</h3>
+<ol><li>Start a new project with <kbd>Ctrl+N</kbd>. Save any previous work when asked.</li><li>Press <kbd>Ctrl+Shift+N</kbd> to add an empty track. Focus Tracks, press F2, type a name, and press Enter to confirm it.</li><li>With the track selected, press <kbd>A</kbd> to arm it for recording. Press Home to start at zero.</li><li>Press <kbd>R</kbd> to record. Speak into the selected microphone. F6 reads the transport snapshot.</li><li>Press Ctrl+Space to pause or resume. Press Space to finish the recording. R also finishes it when Tracks or Clips has focus.</li><li>Return focus to Tracks or Clips and press Space to hear the new take from its start.</li></ol>
+<p>Capture creates WAV assets in data/recordings. Keep them even after saving a project. If recording reports an error, inspect and save any completed audio before retrying.</p>
+</section>
+
+<section aria-labelledby="editing"><h2 id="editing">2. Beginner: edit and save audio</h2>
+<h3 id="time-selection">Set a cursor or selection precisely</h3>
+<p>The time format is <code>hours:minutes:seconds.milliseconds</code>. For example, <code>00:01:15.000</code> is 1 minute 15 seconds. Select the track, Tab to Position or the selection start/end fields, enter the desired values, then activate <strong>Apply times</strong>.</p>
+<p>To select from 1 minute 15 seconds to 1 minute 28.5 seconds, enter <code>00:01:15.000</code> and <code>00:01:28.500</code>. Press F7 to focus the selection readout. Return focus to Tracks/Clips before using audio-editing shortcuts.</p>
+<p>Alternatively, move with Left/Right; hold Shift to extend a selection. Ctrl uses the larger step. Configure the step sizes in Preferences. Enter on a clip selects that entire clip with exact sample boundaries. Escape in Tracks/Clips clears the audio selection.</p>
+<p>With Tracks or Clips focused, press <kbd>[</kbd> at the start. Move or let playback reach the end, then press <kbd>]</kbd>. Both marks use the current playhead during playback. Press F7 to read the range, then return focus to Tracks or Clips. Ctrl+E opens Effects for the range, Delete removes it, and Ctrl+Shift+X exports it.</p>
+<h3 id="cut-copy">Copy, cut, paste and delete</h3>
+<ol><li>Select a time range on a track.</li><li>Press <kbd>Ctrl+C</kbd> to copy or <kbd>Ctrl+X</kbd> to cut. Cut closes the gap.</li><li>Select the destination track and place its cursor. Press <kbd>Ctrl+V</kbd> to paste. Existing later audio shifts to make room.</li><li>Press Ctrl+Z to undo, or Ctrl+Y to redo, while outside a text field.</li></ol>
+<p>Paste replaces an active selection. Clear the selection with Escape first if you want to insert at the cursor instead. The audio clipboard is internal to Sonitrelix and does not exchange audio with other applications. Copy/paste between nonempty tracks requires compatible channel/rate formats; an empty destination can adopt the copied format.</p>
+<p><kbd>Ctrl+A</kbd> selects all audio on the selected track, not all tracks. To cut an entire track’s audio, press Ctrl+A then Ctrl+X. Delete removes selected audio and closes its gap; it does not delete the source file.</p>
+<h3 id="split-trim">Split, trim and insert silence</h3>
+<ul><li><strong>Split at cursor</strong> (Ctrl+T) makes a boundary without removing audio.</li><li><strong>Trim to selection</strong> (Ctrl+Shift+T) keeps only the selected interval on that track.</li><li><strong>Silence selection</strong> (Ctrl+L) replaces the selected audio with silence and keeps its duration.</li><li><strong>Insert silence</strong> (Ctrl+Shift+I) adds silence at the cursor, shifting later audio. Its duration is the selection length, or one second when no range is selected.</li></ul>
+<h3 id="save">Save a project or create an audio file</h3>
+<p><kbd>Ctrl+S</kbd> saves a <strong>.sonitrelix project</strong>; Ctrl+Shift+S saves under another name. A project remembers the arrangement and source references. It is not a playable mix file and does not embed its audio.</p>
+<p><kbd>Ctrl+Shift+E</kbd> exports the audible mix to an audio file you can share. Save the project too if you want to continue editing. Undo history and the current cursor/selection are not restored when you reopen a project.</p>
+</section>
+
+<section aria-labelledby="multitrack"><h2 id="multitrack">3. Intermediate: record vocals over music</h2>
+<h3 id="backing-track">Prepare the backing track and vocal track</h3>
+<ol><li>Import the instrumental with Ctrl+I. Select its track, press F2 and name it Instrumental.</li><li>Add an empty track with Ctrl+Shift+N and name it Vocals.</li><li>Check input/output devices in Preferences and put on headphones.</li><li>Select Vocals and press A to arm it. Check that the instrumental is audible: it must not be muted or excluded by solo.</li><li>Move the cursor to the desired start. R records Vocals while the other audible tracks play.</li><li>Ctrl+Space pauses/resumes both streams. R or Space stops. The completed vocal region appears in its track.</li></ol>
+<p>Recording uses one target track at a time. Its existing audio is excluded from backing playback. New capture replaces the destination interval without shifting later audio; recording at a later position adds silence before it when necessary.</p>
+<h3 id="balance">Balance and organize tracks</h3>
+<p>With Tracks/Clips focused, M toggles mute; S toggles solo; A toggles recording arm. Solo is stored per track. If one or more tracks with audio are soloed and unmuted, the mix plays those tracks together. A muted or empty soloed track does not silence the other tracks.</p>
+<p>Mute and solo take effect during playback. The playhead keeps moving even when all tracks are silent. A, S and M keep focus on your track. Solo feedback can also tell you when the track is muted or empty, or when several tracks are soloed.</p>
+<p>Ctrl+G opens <strong>Volume and pan</strong>. Type a value or use the slider. Volume ranges from −60 to +24 dB. Pan ranges from −100 on the left through 0 at center to +100 on the right. The individual Reset buttons return volume to 0 dB or pan to center. Choose OK to commit, then listen to the mix.</p>
+<p>Ctrl+Shift+D duplicates a track. Alt+Shift+Up/Down reorders it. Ctrl+Shift+Delete deletes the selected track from the project. Undo restores a removed track; source assets remain on disk.</p>
+</section>
+
+<section aria-labelledby="effects"><h2 id="effects">4. Intermediate: apply effects and export</h2>
+<h3 id="effect-workflow">Preview and apply an effect</h3>
+<ol><li>Select a track and, optionally, a time range. With no selected range, the effect processes the whole track.</li><li>Press Ctrl+E to open Effects. Choose an effect and adjust its settings.</li><li>Use Preview for a short audition, and Stop preview before making another comparison.</li><li>Choose Apply to process in the background. Cancel closes without applying a new edit.</li><li>Listen to the result. Ctrl+Z restores the earlier audio if needed.</li></ol>
+<p>Effects create new audio assets rather than rewriting originals. They are undoable rendered edits, not a live plug-in chain. A preview is only a short excerpt; listen to the full result before exporting.</p>
+<dl><dt>Amplify and Normalize</dt><dd>Change level. Start with small gain changes; normalization sets a peak target, not perceived loudness.</dd><dt>Fade In and Fade Out</dt><dd>Increase or reduce level across the chosen region. Useful for entrances and endings.</dd><dt>Reverse and Silence</dt><dd>Reverse sample order, or replace the region with silence.</dd><dt>Basic EQ</dt><dd>Adjust low, middle and high frequency balance.</dd><dt>Compressor</dt><dd>Reduce peaks above a threshold. Compare the result at a similar listening level.</dd><dt>Noise Gate</dt><dd>Reduce quiet passages below a threshold. An aggressive setting can remove quiet words.</dd><dt>Reverb</dt><dd>Add a reverberant sound. Preview a small amount first so words remain clear.</dd></dl>
+<p>In Effects and Volume and pan, Tab goes from each number field to its Reset button and then its slider. Use the arrow keys for fine slider changes or Page Up and Page Down for larger changes. Type directly into the number field for exact values.</p>
+<p>Activate Reset with Space to restore that setting’s default. Reset updates the field and slider together. Choose Apply in Effects or OK in Volume and pan to commit your changes.</p>
+<h3 id="ffmpeg-effects">Clean up vocals and adjust tempo with FFmpeg</h3>
+<p>Ctrl+E offers Noise Reduction for steady noise, De-esser for sharp S sounds, De-hum for a 50 or 60 Hz buzz, and Change Tempo for speed changes that preserve pitch. Changing tempo shifts later audio on the edited track. Preview, Apply and Ctrl+Z work as with the built-in effects.</p>
+<p>For Automatic Ducking, select the backing track and choose the controlling voice inside Effects. The voice lowers the backing at matching times. Preview plays the processed backing alone. Apply makes an undoable edit to the backing. Play the project to hear both tracks together.</p>
+<p>Noise Reduction estimates the background from quieter parts of your selection. Include a brief pause with the steady noise you want to reduce.</p>
+<h3 id="export">Export the combined mix</h3>
+<ol><li>Check mute/solo and gain/pan by listening to the whole project.</li><li>Open Preferences &gt; Export. Choose a sample rate, mono/stereo channels and MP3 bitrate as appropriate. Apply.</li><li>Press Ctrl+Shift+E. Choose a format, filename and destination. FFmpeg adds AAC in M4A at 192 kbps and Opus at 128 kbps and 48 kHz. It can also encode MP3 if Windows cannot initialize its encoder.</li><li>Wait for completion. Escape cancels an active export in the main window. Cancellation preserves an existing destination file.</li><li>Reopen the exported file and verify its duration, sound and channels.</li></ol>
+<p>Export renders the whole audible project mix, not just the selected track or time range. For an excerpt from the selected track, choose File &gt; Export selected audio (Ctrl+Shift+X). This uses only that track, with its gain and pan and independent of project mute or solo. Imported sources are protected from export overwrite.</p>
+<p>WAV and FLAC output is PCM16; FLAC preserves those samples but may compress less than other encoders. MP3 can add encoder padding. Choose WAV or FLAC when exact duration matters. Sonitrelix uses FFmpeg for MP3 if the Windows encoder cannot start and FFmpeg is available.</p>
+</section>
+
+<section aria-labelledby="preferences"><h2 id="preferences">5. Set up your preferences</h2>
+<p>Open Tools &gt; Preferences with Ctrl+,. Use Ctrl+Tab or Ctrl+Shift+Tab to change category. Tab visits controls. F1 or Ctrl+H opens category help while Preferences is active.</p>
+<ul><li><strong>General:</strong> language, new-project sample rate and automatic update checks.</li><li><strong>Audio devices:</strong> independent input/output endpoints and refresh.</li><li><strong>Recording / playback:</strong> recording channels, buffering and manual alignment offset. Live monitoring is unavailable.</li><li><strong>Editing / keyboard:</strong> cursor step sizes and Keyboard shortcuts.</li><li><strong>Accessibility:</strong> detailed time reading and available focus/status options.</li><li><strong>Export:</strong> output rate, channels and MP3 bitrate.</li></ul>
+<h3 id="custom-keys">Customize editing shortcuts</h3>
+<p>In Editing / keyboard, open Keyboard shortcuts, choose an action and enter a chord. The available actions cover editing, tracks, effects and transport. Apply Preferences to save. Conflicting or reserved combinations are rejected. Global project/help keys remain fixed.</p>
+<p>The tables below show defaults. After customization, use the chords shown in your settings. Plain letter keys are intended for Tracks/Clips, not text entry. Language changes labels, not the physical default combinations.</p>
+</section>
+
+<section aria-labelledby="advanced"><h2 id="advanced">6. Advanced: precise timing and project safety</h2>
+<h3 id="alignment">Compensate for recording delay</h3>
+<p>If recorded vocals land late, test a negative Recording alignment offset in milliseconds under Recording / playback. Positive values place capture later; negative values place it earlier, clamped at the project start. The permitted range is −2000 to +2000 milliseconds.</p>
+<ol><li>Record a brief clap or click while listening to a known backing cue through headphones.</li><li>Compare its timing with the cue. Adjust the offset and make a new test take.</li><li>Repeat after changing devices or buffering. Also test pause/resume and a long take.</li></ol>
+<p>The offset affects new recordings, not existing clips. Coordinated stream starts are implemented, but automatic latency measurement and drift correction are not. The project’s rate and each track’s rate can differ; playback/export resamples in the background. Copy/paste compatibility rules are separate.</p>
+<h3 id="asset-safety">Keep projects and media together</h3>
+<p>Back up the .sonitrelix file, all referenced originals and generated data audio folders. Save As changes the project filename, not the location of its assets. Renaming/moving a referenced source can prevent playback. There is no automatic media relinking or self-contained project bundle.</p>
+<p>Clips are consecutive regions with silence gaps. Split and ripple edits are supported; freely dragging/moving overlapping clips is not. Plan edits on a duplicate track when trying a different arrangement.</p>
+<h3 id="recovery">Recover unsaved project changes</h3>
+<p>While a project has unsaved changes, Sonitrelix makes a metadata checkpoint about every 30 seconds. After an abnormal exit, startup may offer recovery from an exited instance. Recover, inspect the result and save a named project. Recovery does not guarantee unfinished recording or power-loss survival.</p>
+<p>File &gt; Recent Projects keeps up to ten paths. A missing recent file produces an error; it does not restore its media.</p>
+<h3 id="updates">Check and install updates</h3>
+<p>Help &gt; Check for updates checks stable GitHub releases. A portable build can install a newer release only when its signed manifest and executable pass verification. Save work and stop recording first. Skip Version suppresses automatic offers; manual checks can offer it again.</p>
+<p>Installation preserves data and keeps an executable backup. Failed startup triggers rollback. Disable daily checks in Preferences &gt; General if desired. Builds without the portable marker offer manual downloads.</p>
+</section>
+
+<section aria-labelledby="shortcuts"><h2 id="shortcuts">7. Keyboard shortcut tables</h2>
+<p>These are default shortcuts. The track/editing tables require Tracks or Clips focus unless stated otherwise. Browser reading shortcuts apply to this HTML document only.</p>
+<h3 id="keys-project">Project and navigation</h3>
+<table><caption>Main-window project shortcuts</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Ctrl+N">Ctrl+N</th><td>New project; prompt to save unsaved work.</td></tr>
+<tr><th scope="row" data-key="Ctrl+O">Ctrl+O</th><td>Open a project, not an audio import.</td></tr>
+<tr><th scope="row" data-key="Ctrl+S">Ctrl+S</th><td>Save project.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+S">Ctrl+Shift+S</th><td>Save project as another filename.</td></tr>
+<tr><th scope="row" data-key="Ctrl+I">Ctrl+I</th><td>Import audio.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+E">Ctrl+Shift+E</th><td>Export the audible project mix.</td></tr>
+<tr><th scope="row" data-key="Ctrl+,">Ctrl+,</th><td>Open Tools &gt; Preferences.</td></tr>
+<tr><th scope="row" data-key="F1">F1</th><td>Open the user guide; category help in Preferences.</td></tr>
+<tr><th scope="row" data-key="F6">F6</th><td>Focus the transport snapshot.</td></tr>
+<tr><th scope="row" data-key="F7">F7</th><td>Focus the selection readout.</td></tr>
+<tr><th scope="row">Tab / Shift+Tab</th><td>Next / previous control.</td></tr>
+<tr><th scope="row">Up / Down</th><td>Choose a track or clip in the focused list.</td></tr>
+<tr><th scope="row">Alt+F4</th><td>Standard Windows close-window command; prompts for unsaved work when appropriate.</td></tr>
+</tbody></table>
+<h3 id="keys-transport">Playback and recording</h3>
+<table><caption>Transport defaults in Tracks/Clips; Space and Ctrl+Space also work in the transport readout</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Space">Space</th><td>Play/stop the mix; stop an active recording.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Space">Ctrl+Space</th><td>Pause/resume playback or recording, including backing playback.</td></tr>
+<tr><th scope="row" data-key="R">R</th><td>Start/stop recording into the armed target track.</td></tr>
+</tbody></table>
+<h3 id="keys-edit">Audio editing</h3>
+<table><caption>Editing defaults with Tracks/Clips focused</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Ctrl+Z">Ctrl+Z</th><td>Undo an audio/project edit outside text fields.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Y">Ctrl+Y</th><td>Redo outside text fields.</td></tr>
+<tr><th scope="row">[ / ]</th><td>Mark the start / end of the selection at the cursor or playhead.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+X">Ctrl+Shift+X</th><td>Export the selected range of the current track.</td></tr>
+<tr><th scope="row" data-key="Ctrl+A">Ctrl+A</th><td>Select all audio on the selected track.</td></tr>
+<tr><th scope="row" data-key="Ctrl+C">Ctrl+C</th><td>Copy selected audio to the internal clipboard.</td></tr>
+<tr><th scope="row" data-key="Ctrl+X">Ctrl+X</th><td>Cut selected audio, closing the gap.</td></tr>
+<tr><th scope="row" data-key="Ctrl+V">Ctrl+V</th><td>Paste audio at the cursor.</td></tr>
+<tr><th scope="row">Ctrl+A, then Ctrl+X</th><td>Cut all audio on the selected track.</td></tr>
+<tr><th scope="row" data-key="Delete">Delete</th><td>Delete selected audio, closing its gap.</td></tr>
+<tr><th scope="row" data-key="Ctrl+T">Ctrl+T</th><td>Split the selected track’s clip at the cursor.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+T">Ctrl+Shift+T</th><td>Trim the track to the selected range.</td></tr>
+<tr><th scope="row" data-key="Ctrl+L">Ctrl+L</th><td>Silence the selection without changing duration.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+I">Ctrl+Shift+I</th><td>Insert silence: selection duration or one second.</td></tr>
+<tr><th scope="row" data-key="Ctrl+E">Ctrl+E</th><td>Open Effects for selection or whole track.</td></tr>
+<tr><th scope="row">Enter in Clips</th><td>Select the entire focused clip with exact boundaries.</td></tr>
+<tr><th scope="row">Escape in Tracks/Clips</th><td>Clear the audio selection.</td></tr>
+</tbody></table>
+<h3 id="keys-time">Cursor and selection movement</h3>
+<table><caption>Timing defaults with Tracks/Clips focused</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><th scope="row">Left / Right</th><td>Move cursor backward/forward by the small step.</td></tr>
+<tr><th scope="row">Ctrl+Left / Ctrl+Right</th><td>Move cursor by the large step.</td></tr>
+<tr><th scope="row">Shift+Left / Shift+Right</th><td>Extend selection by the small step.</td></tr>
+<tr><th scope="row">Ctrl+Shift+Left / Ctrl+Shift+Right</th><td>Extend selection by the large step.</td></tr>
+<tr><th scope="row">Home / End</th><td>Move to selected-track start/end.</td></tr>
+<tr><th scope="row">Shift+Home / Shift+End</th><td>Extend selection to track start/end.</td></tr>
+</tbody></table>
+<h3 id="keys-tracks">Track management</h3>
+<table><caption>Track defaults with Tracks/Clips focused, except adding a track is global</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><th scope="row" data-key="Ctrl+Shift+N">Ctrl+Shift+N</th><td>Add an empty track.</td></tr>
+<tr><th scope="row" data-key="F2">F2</th><td>Edit track name; Enter confirms, Escape cancels.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+D">Ctrl+Shift+D</th><td>Duplicate track.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+Delete">Ctrl+Shift+Delete</th><td>Delete track from the project.</td></tr>
+<tr><th scope="row" data-key="Alt+Shift+Up">Alt+Shift+Up</th><td>Move track up.</td></tr>
+<tr><th scope="row" data-key="Alt+Shift+Down">Alt+Shift+Down</th><td>Move track down.</td></tr>
+<tr><th scope="row" data-key="M">M</th><td>Toggle mute.</td></tr>
+<tr><th scope="row" data-key="S">S</th><td>Toggle solo.</td></tr>
+<tr><th scope="row" data-key="A">A</th><td>Toggle recording arm.</td></tr>
+<tr><th scope="row" data-key="Ctrl+G">Ctrl+G</th><td>Open Volume and pan.</td></tr>
+</tbody></table>
+<h3 id="keys-dialogs">Preferences and read-only Help viewer</h3>
+<table><caption>Keys specific to Preferences or native Help</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><th scope="row">Ctrl+Tab / Ctrl+Shift+Tab</th><td>Next / previous Preferences category.</td></tr>
+<tr><th scope="row">F1 / Ctrl+H in Preferences</th><td>Open category help.</td></tr>
+<tr><th scope="row">Ctrl+F in Help</th><td>Focus Find.</td></tr>
+<tr><th scope="row">F3 in Help</th><td>Find the next match.</td></tr>
+<tr><th scope="row">Enter in Help sections / Find</th><td>Read the selected section / search.</td></tr>
+<tr><th scope="row">Ctrl+A / Ctrl+C in Help content</th><td>Select / copy read-only guide text.</td></tr>
+<tr><th scope="row">Escape in Help / Preferences</th><td>Close Help / cancel unapplied Preferences changes.</td></tr>
+<tr><th scope="row">Escape during main-window export</th><td>Request export cancellation.</td></tr>
+</tbody></table>
+</section>
+
+<section aria-labelledby="problems"><h2 id="problems">8. Troubleshooting and current limits</h2>
+<h3 id="no-sound">No playback or microphone signal</h3>
+<p>Check Windows volume, microphone privacy permissions and your selected input/output. Refresh devices after reconnecting USB hardware. For playback, check mute/solo; for recording, select and arm a target track and verify channels. If your selected microphone disconnects, reconnect it or choose another input in Preferences before trying again.</p>
+<h3 id="keys-not-working">A shortcut types text or does nothing</h3>
+<p>Return focus to Tracks or Clips using Tab. Check customized bindings. In a browser, Alt+Tab back to Sonitrelix first. In text fields, ordinary typing and text clipboard shortcuts intentionally retain their Windows behavior.</p>
+<h3 id="missing-audio">A project cannot find its audio</h3>
+<p>Restore the source at its saved path from your backup. Save As does not collect media. Do not delete data/recordings or data/imports just because the project file has been saved.</p>
+<h3 id="format-error">Import or export fails</h3>
+<p>Try a supported WAV file and a writable destination first. Check free disk space and Windows media components. For MP3, choose a supported sample rate/bitrate/channel combination. Preserve the original files and avoid retrying by overwriting them.</p>
+<h3 id="report">Report a problem</h3>
+<p>Include the version from Help &gt; About, Windows version, screen reader/version, selected devices, the exact keys used and the error text. Errors are in data/error.log next to the portable executable, under its data folder. The session event log is data/session.jsonl. Review logs before sharing; they may include local paths. Do not share private recordings or update-signing keys.</p>
+<p>For recent changes or version information, open <strong>Changelog</strong> or <strong>About</strong> from Help.</p>
+</section>

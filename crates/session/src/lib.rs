@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Clip {
@@ -73,6 +73,8 @@ pub struct Project {
     pub version: u32,
     pub sample_rate: u32,
     pub tracks: Vec<Track>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub original_sources: Vec<PathBuf>,
 }
 impl Default for Project {
     fn default() -> Self {
@@ -80,6 +82,7 @@ impl Default for Project {
             version: SCHEMA_VERSION,
             sample_rate: 48000,
             tracks: vec![],
+            original_sources: vec![],
         }
     }
 }
@@ -122,12 +125,17 @@ impl Project {
             }
             p.version = SCHEMA_VERSION;
         }
+        if p.version == 3 {
+            p.version = SCHEMA_VERSION;
+        }
         p.validate()?;
         Ok(p)
     }
     pub fn validate(&self) -> io::Result<()> {
         if self.version != SCHEMA_VERSION
             || !(8000..=384000).contains(&self.sample_rate)
+            || self.original_sources.len() > 100000
+            || self.original_sources.iter().any(|p| !p.is_absolute())
             || self.tracks.iter().any(|t| {
                 t.name.trim().is_empty()
                     || !t.gain.is_finite()
@@ -187,8 +195,13 @@ impl Project {
             ));
         }
         if let Ok(destination) = fs::canonicalize(path) {
-            for source in self.tracks.iter().flat_map(|t| t.sources()) {
-                if fs::canonicalize(&source.path).is_ok_and(|s| s == destination) {
+            for source in self
+                .tracks
+                .iter()
+                .flat_map(|t| t.sources().map(|m| &m.path))
+                .chain(self.original_sources.iter())
+            {
+                if fs::canonicalize(source).is_ok_and(|s| s == destination) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "A project cannot overwrite an imported audio source",
@@ -228,11 +241,11 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     result
 }
 #[cfg(not(windows))]
-fn replace(from: &Path, to: &Path) -> io::Result<()> {
+pub fn replace(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
 }
 #[cfg(windows)]
-fn replace(from: &Path, to: &Path) -> io::Result<()> {
+pub fn replace(from: &Path, to: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -384,7 +397,7 @@ mod tests {
         });
         fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
         let new = Project::load(&path).unwrap();
-        assert_eq!(new.version, 3);
+        assert_eq!(new.version, SCHEMA_VERSION);
         assert!(new.tracks[0].media.is_none());
         assert_eq!(new.tracks[0].sample_rate, 44100);
         assert_eq!(new.tracks[0].clips[0].frames, 1000);

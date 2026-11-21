@@ -1,12 +1,17 @@
 //! Bounded, non-destructive RIFF/WAVE PCM reader. No whole-file sample allocation.
+mod flac;
 mod timeline;
 mod writer;
+pub use flac::FlacWriter;
+#[cfg(windows)]
+pub mod codecs;
+pub mod ffmpeg;
 use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom},
     path::Path,
 };
-pub use timeline::{Segment, Source, Timeline, TimelineReader};
+pub use timeline::{LiveMix, MixTrack, Segment, Source, Timeline, TimelineReader};
 pub use writer::WavWriter;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Encoding {

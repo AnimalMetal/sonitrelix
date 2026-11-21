@@ -1,7 +1,9 @@
 //! Streaming selected-file transport. Disk decoding and WASAPI rendering are separate.
+mod gate;
 #[cfg(windows)]
 pub mod recording;
 mod ring;
+pub use gate::StartGate;
 #[cfg(windows)]
 mod wasapi;
 use sonitrelix_audio_io::Timeline;
@@ -39,6 +41,7 @@ impl State {
 }
 #[derive(Clone, Debug)]
 pub struct PlayRequest {
+    pub gate: Option<Arc<StartGate>>,
     pub timeline: Timeline,
     pub start_ms: u64,
     pub start_frame: Option<u64>,
@@ -275,8 +278,21 @@ mod tests {
             .expect("An active multimedia output is required");
         let expected = sonitrelix_audio_io::WavReader::open(&path).unwrap().info;
         let mut engine = Engine::new().unwrap();
+        let mix = sonitrelix_audio_io::LiveMix::new(vec![true]);
+        let timeline = Timeline::mix(
+            expected.sample_rate,
+            vec![sonitrelix_audio_io::MixTrack {
+                timeline: Timeline::single(path, expected).unwrap(),
+                gain: 1.0,
+                pan: 0.0,
+            }],
+        )
+        .unwrap()
+        .with_live_mix(mix.clone())
+        .unwrap();
         let mut request = PlayRequest {
-            timeline: Timeline::single(path, expected).unwrap(),
+            gate: None,
+            timeline,
             start_ms: 0,
             start_frame: None,
             output_id: device.id.clone(),
@@ -288,6 +304,14 @@ mod tests {
             s.state == State::Playing && s.position_ms() > 100
         });
         assert!(playing.device_buffer_frames > 0);
+        mix.update([false].into_iter());
+        let muted = wait(&engine, id, |s| {
+            s.state == State::Playing && s.position_ms() > playing.position_ms() + 150
+        });
+        mix.update([true].into_iter());
+        wait(&engine, id, |s| {
+            s.state == State::Playing && s.position_ms() > muted.position_ms() + 150
+        });
         engine.pause(true);
         wait(&engine, id, |s| s.state == State::Paused);
         thread::sleep(Duration::from_millis(60));

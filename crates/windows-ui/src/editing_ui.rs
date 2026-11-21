@@ -16,12 +16,15 @@ pub(super) const MOVE_DOWN: usize = 813;
 pub(super) const RENAME_FOCUS: usize = 814;
 pub(super) const CLEAR_SELECTION: usize = 815;
 pub(super) const READ_SELECTION: usize = 817;
+pub(super) const MARK_START: usize = 818;
+pub(super) const MARK_END: usize = 819;
 #[derive(Default)]
 pub(super) struct Editor {
     pub clipboard: Option<edit::Clipboard>,
     pub renaming: bool,
     pub exact_selection: Option<(usize, u64, u64)>,
     pub exact_cursor: Option<(usize, u64)>,
+    pub bracket_start: Option<(usize, u64)>,
 }
 #[derive(Clone)]
 pub(super) struct History {
@@ -50,6 +53,7 @@ impl App {
             self.selection = h.selection;
             self.editor.exact_selection = h.exact;
             self.editor.exact_cursor = h.cursor;
+            self.editor.bracket_start = None;
             self.selection_anchor = None;
             self.refresh();
             if let Some(index) = h.track {
@@ -139,6 +143,7 @@ impl App {
             self.editor.renaming = false;
             self.editor.exact_selection = None;
             self.editor.exact_cursor = None;
+            self.editor.bracket_start = None;
             self.selection = (self.position, self.position);
             self.selection_anchor = None;
             self.sync_times();
@@ -189,6 +194,71 @@ impl App {
             self.status(&text);
         }
     }
+    pub(super) fn selected_range(&self, index: usize) -> (u64, u64) {
+        let track = &self.project.tracks[index];
+        let (start, end) = self
+            .editor
+            .exact_selection
+            .filter(|(i, _, _)| *i == index)
+            .map(|(_, start, end)| (start, end))
+            .unwrap_or_else(|| {
+                (
+                    sonitrelix_audio_io::ms_to_frames(self.selection.0, track.sample_rate),
+                    sonitrelix_audio_io::ms_to_frames(self.selection.1, track.sample_rate),
+                )
+            });
+        (start.min(track.frames()), end.min(track.frames()))
+    }
+
+    unsafe fn mark_boundary(&mut self, index: usize, at_end: bool) {
+        unsafe {
+            let track = &self.project.tracks[index];
+            let rate = track.sample_rate;
+            let frame = self.track_cursor_frame(index).min(track.frames());
+            self.position = sonitrelix_audio_io::frames_to_ms(frame, rate);
+            self.editor.exact_cursor = Some((index, frame));
+            let message;
+            if at_end {
+                let (start, end) = self.selected_range(index);
+                let start = self
+                    .editor
+                    .bracket_start
+                    .filter(|(i, _)| *i == index)
+                    .map(|(_, start)| start)
+                    .or_else(|| (start < end).then_some(start));
+                if let Some(start) = start.filter(|start| *start < frame) {
+                    self.editor.exact_selection = Some((index, start, frame));
+                    self.selection = (
+                        sonitrelix_audio_io::frames_to_ms(start, rate),
+                        ceil_ms(frame, rate),
+                    );
+                    self.editor.bracket_start = None;
+                    message = format!(
+                        "{} {}. {} {} ms",
+                        self.t("selection_mark_end"),
+                        format_time(ceil_ms(frame, rate)),
+                        self.t("selection_mark_duration"),
+                        sonitrelix_audio_io::frames_to_ms(frame - start, rate)
+                    );
+                } else {
+                    message = self.t("selection_mark_end_invalid");
+                    self.status(&message);
+                    announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+                    return;
+                }
+            } else {
+                self.editor.bracket_start = Some((index, frame));
+                self.editor.exact_selection = Some((index, frame, frame));
+                let time = sonitrelix_audio_io::frames_to_ms(frame, rate);
+                self.selection = (time, time);
+                message = format!("{} {}", self.t("selection_mark_start"), format_time(time));
+            }
+            self.selection_anchor = None;
+            self.sync_times();
+            self.status(&message);
+            announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+        }
+    }
     pub(super) unsafe fn begin_rename(&mut self) {
         unsafe {
             if let Some(i) = self.selected_track() {
@@ -234,6 +304,7 @@ impl App {
                 self.checkpoint();
                 self.editor.exact_cursor = None;
                 self.editor.exact_selection = None;
+                self.editor.bracket_start = None;
                 self.project.add_track(format!(
                     "{} {}",
                     self.t("track_word"),
@@ -254,6 +325,10 @@ impl App {
                 self.status(&self.t("edit_no_track"));
                 return;
             };
+            if [MARK_START, MARK_END].contains(&id) {
+                self.mark_boundary(i, id == MARK_END);
+                return;
+            }
             if id == RENAME_FOCUS {
                 self.begin_rename();
                 return;
@@ -265,6 +340,7 @@ impl App {
             }
             if id == CLEAR_SELECTION {
                 self.editor.exact_selection = None;
+                self.editor.bracket_start = None;
                 self.selection = (self.position, self.position);
                 self.selection_anchor = None;
                 self.sync_times();
@@ -284,6 +360,7 @@ impl App {
                 self.reset_playback();
                 self.editor.exact_cursor = None;
                 self.editor.exact_selection = None;
+                self.editor.bracket_start = None;
                 let selected = if id == DUPLICATE {
                     let mut t = self.project.tracks[i].clone();
                     t.name = format!("{} {}", t.name, self.t("edit_copy_suffix"));
@@ -328,6 +405,7 @@ impl App {
                 .map(|(_, f)| f)
                 .unwrap_or_else(|| sonitrelix_audio_io::ms_to_frames(self.position, rate));
             if id == SELECT_ALL {
+                self.editor.bracket_start = None;
                 self.editor.exact_selection = Some((i, 0, self.project.tracks[i].frames()));
                 self.selection = (0, ceil_ms(self.project.tracks[i].frames(), rate));
                 self.selection_anchor = None;
@@ -400,6 +478,7 @@ impl App {
                     self.checkpoint();
                     self.reset_playback();
                     self.project.tracks[i] = next;
+                    self.editor.bracket_start = None;
                     if let Some(c) = clipboard {
                         self.editor.clipboard = Some(c);
                     }

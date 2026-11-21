@@ -1,6 +1,50 @@
+# User guide follow-up - 0.6.0
+
+The bilingual HTML user guide now progresses from beginner to advanced, with linked contents and six two-column shortcut tables per language. The native F1 text is generated from the same content; Help provides an Open HTML guide action. HTML is self-contained, embedded and refreshed for both languages under data/docs, and copied into portable packages.
+
+Passed the documentation check (heading levels, IDs, links, table headers/captions, translated section/default-key parity, generated text synchronization), all 17 Windows UI tests, formatting and workspace Clippy with warnings denied. New tests cover embedded HTML extraction/update in a Unicode temporary path and coverage of all 22 configurable defaults in both guides. The release build passed.
+
+Browser preview was unavailable: the browser access host was unavailable and Computer Use did not approve Microsoft Edge. Visual layout, browser navigation/printing, end-to-end default-browser opening and actual NVDA/JAWS reading are unverified. No browser security restriction was bypassed. See USER_GUIDE_MAINTENANCE.md for the remaining manual checks.
+
+## Previous validation
+
+# Current validation - 0.6.0
+
+Passed 53 ordinary workspace tests and 3 separately invoked Windows endpoint/engine checks (56 total). Final native UI rerun: 15 passed. Formatting, Clippy with warnings denied and release compilation passed. The release executable reports 0.6.0.
+
+Tests cover mixed-rate/gain/pan timelines, timing gates, WAV/MP3/FLAC export, MP3/FLAC/M4A import fixtures, schema migration/source overwrite protection, recovery, shortcut routing, native preference controls and update signature/tamper/replacement/rollback. Installer tests use disposable executable stubs and Unicode/apostrophe temporary paths, preserve data and refuse to kill the original process. These are not full real-application update acceptance tests.
+
+The 3 hardware checks found 3 input/4 output endpoints, rendered silence and tested invalid input. No microphone was activated. Actual listening, overdub latency/drift, device removal during capture, NVDA/JAWS, keyboard independence, enlarged text/high contrast, Windows 10 and live GitHub delivery remain pending. OGG and raw ADTS AAC import are unverified. MP3 encoder priming/padding is accepted; WAV/FLAC are tested for exact PCM duration. See MULTITRACK.md for manual steps.
+
+The graph has 31 external packages. OpenSSL is statically linked with retained licenses; Windows media codecs are system components. The updated hosted workflow still needs verification. Source changes have not been pushed from this restricted environment.
+
+Reproduce:
+
+```powershell
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo test -p sonitrelix-devices -p sonitrelix-engine --locked -- --ignored --nocapture
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1
+```
+
+Portable packaging passed ZIP CRC/integrity, marker presence, byte-for-byte EXE matching, SHA-256 and exclusion of data/private keys. The real release manifest was signed offline and verified by the Rust updater against the exact EXE (Ed25519, size and SHA-256). No release was published. A fresh portable EXE reached an input-idle/responding state, logged startup and closed gracefully after WM_CLOSE targeted SonitrelixMain. The generic process helper initially selected an input-method window; no app shutdown defect was observed. This is a process/API smoke check, not screen-reader or independent keyboard validation.
+
+## Historical records
+
 # Validation record — 2026-11-20
 
-## Current build — 0.4.0
+## Historical build — 0.5.0
+
+Passed 38 ordinary workspace tests and three explicitly invoked Windows audio integration checks (41 checks total). Format checking, Clippy with warnings denied and release compilation passed.
+
+New tests cover gain, normalization, fades, unity EQ, linked compressor/gate, reverb impulse/tail and chunk continuity, reverse preserving stereo ordering, float32 render roundtrip, cancellation and original-source preservation. Native tests cover all ten effect choices and default parameters, NaN rejection, background Apply, output length/encoding, field names and mnemonic conflicts in English/Spanish. Applying a rendered effect is exercised through project undo/redo. Release fixtures cover numeric versions, draft/prerelease boundaries, rate limits, missing/mismatched package URLs and oversized response rejection. Updates use the tested read-only help viewer.
+
+The three audio integration checks passed on the existing active Windows endpoints with silent playback fixtures and an invalid-input test only; no microphone was activated. Actual effect preview listening, independent keyboard/NVDA/JAWS use, screen layouts at all scales, real HTTPS responses, browser download routing and the new tag-to-Release publisher remain unverified. Automatic installation/signature verification is not implemented. See EFFECTS_UPDATES.md for the current manual checklist and limits.
+
+The external dependency graph remains unchanged; effects are original Rust code and WinHTTP is a Windows system API. No new codec, cryptography or networking package was introduced.
+
+## Historical build — 0.4.0
 
 Passed 33 ordinary workspace tests and three explicitly invoked Windows integration checks (36 total). Formatting, Clippy with warnings denied, and release compilation succeeded on Windows x64 with the existing stable Rust/MSVC toolchain.
 

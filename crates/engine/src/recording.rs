@@ -26,6 +26,7 @@ use windows::{
     core::PCWSTR,
 };
 pub struct RecordRequest {
+    pub gate: Option<Arc<super::StartGate>>,
     pub path: PathBuf,
     pub input_id: String,
     pub sample_rate: u32,
@@ -131,6 +132,7 @@ fn record(
     let rate = r.sample_rate;
     let channels = r.channels;
     let buffer = r.buffer_frames;
+    let gate = r.gate.clone();
     let capture = thread::Builder::new()
         .name("wasapi-capture".into())
         .spawn(move || {
@@ -143,6 +145,7 @@ fn record(
                     &f,
                     &w,
                     &mut producer,
+                    gate.as_deref(),
                 )
             }
         })
@@ -220,6 +223,7 @@ unsafe fn capture(
     frames: &AtomicU64,
     wake: &Signal,
     producer: &mut ring::Producer,
+    gate: Option<&super::StartGate>,
 ) -> Result<(), String> {
     unsafe {
         let (input, rate, channels, buffer) = spec;
@@ -274,9 +278,14 @@ unsafe fn capture(
         }
         let capture: IAudioCaptureClient = client.0.GetService().map_err(err)?;
         let zeros = vec![0f32; capacity as usize * usize::from(channels)];
+        if let Some(gate) = gate {
+            gate.wait(2, 1, || stop.load(Ordering::Acquire))
+                .map_err(|e| e.to_string())?;
+        }
         client.0.Start().map_err(err)?;
         let mut first = true;
         let mut running = true;
+        let mut start_phase = 1u32;
         while !stop.load(Ordering::Acquire) {
             if paused.load(Ordering::Acquire) {
                 if running {
@@ -287,6 +296,15 @@ unsafe fn capture(
                 continue;
             }
             if !running {
+                start_phase += 1;
+                if let Some(gate) = gate
+                    && let Err(e) = gate.wait(2, start_phase, || stop.load(Ordering::Acquire))
+                {
+                    if stop.load(Ordering::Acquire) {
+                        return Ok(());
+                    }
+                    return Err(e.to_string());
+                }
                 client.0.Start().map_err(err)?;
                 running = true;
                 first = true;
@@ -329,6 +347,104 @@ unsafe fn capture(
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "Briefly opens the actual default microphone; deletes the test recording"]
+    fn default_microphone_captures_and_resumes_with_backing() {
+        let path = std::env::temp_dir().join(format!(
+            "sonitrelix-capture-smoke-{}.wav",
+            std::process::id()
+        ));
+        let gate = Arc::new(super::super::StartGate::new());
+        let timeline = sonitrelix_audio_io::Timeline::new(
+            48000,
+            2,
+            vec![sonitrelix_audio_io::Segment {
+                source: None,
+                source_start: 0,
+                frames: 240000,
+            }],
+        )
+        .unwrap();
+        let mut backing = super::super::Engine::new().unwrap();
+        backing
+            .play(super::super::PlayRequest {
+                gate: Some(gate.clone()),
+                timeline,
+                start_ms: 0,
+                start_frame: None,
+                output_id: String::new(),
+                buffer_frames: 512,
+                paused: false,
+            })
+            .unwrap();
+        let recorder = Recorder::start(RecordRequest {
+            gate: Some(gate),
+            path: path.clone(),
+            input_id: String::new(),
+            sample_rate: 48000,
+            channels: 1,
+            buffer_frames: 512,
+        })
+        .unwrap();
+        let exercise = || -> Result<WavInfo, String> {
+            let wait_frames = |target: u64| -> Result<(), String> {
+                let deadline = Instant::now() + Duration::from_secs(8);
+                while recorder.frames() < target {
+                    if let Some(result) = recorder.try_result() {
+                        return Err(result
+                            .err()
+                            .unwrap_or_else(|| "Capture stopped early".into()));
+                    }
+                    if Instant::now() >= deadline {
+                        return Err("Microphone did not deliver frames".into());
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Ok(())
+            };
+            wait_frames(9600)?;
+            recorder.pause(true);
+            backing.pause(true);
+            thread::sleep(Duration::from_millis(150));
+            let paused = recorder.frames();
+            thread::sleep(Duration::from_millis(120));
+            if paused != recorder.frames() {
+                return Err("Microphone continued capturing while paused".into());
+            }
+            recorder.pause(false);
+            backing.pause(false);
+            wait_frames(paused + 9600)?;
+            recorder.stop();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                if let Some(result) = recorder.try_result() {
+                    let result = result?;
+                    if let Some(warning) = result.warning {
+                        return Err(warning);
+                    }
+                    return Ok(result.info);
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err("Capture did not finalize".into())
+        };
+        let result = exercise();
+        recorder.stop();
+        backing.stop();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !recorder.done() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        let saved = sonitrelix_audio_io::WavReader::open(&path).map(|reader| reader.info);
+        std::fs::remove_file(path).unwrap();
+        let info = result.unwrap();
+        assert_eq!(saved.unwrap(), info);
+        assert!(info.frames >= 19200);
+        println!(
+            "Captured and finalized {} frames with backing playback",
+            info.frames
+        );
+    }
+    #[test]
     #[ignore = "Invalid input endpoint only; never activates or captures a microphone"]
     fn invalid_input_does_not_fall_back() {
         let path = std::env::temp_dir().join(format!(
@@ -336,6 +452,7 @@ mod tests {
             std::process::id()
         ));
         let r = Recorder::start(RecordRequest {
+            gate: None,
             path: path.clone(),
             input_id: "sonitrelix-nonexistent-input".into(),
             sample_rate: 48000,

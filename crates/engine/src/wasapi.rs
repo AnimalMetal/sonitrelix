@@ -229,7 +229,14 @@ fn start(
     progress.underruns.store(0, Ordering::Relaxed);
     progress.device_buffer.store(0, Ordering::Relaxed);
     let channels = usize::from(reader.info().channels);
-    let (mut producer, consumer) = ring::ring(32768 * channels);
+    // Keep less premixed audio queued for interactive mute/solo.
+    let (queue_frames, block_frames) = if request.timeline.is_live_mix() {
+        let rate = reader.info().sample_rate as usize;
+        ((rate / 12).next_power_of_two(), rate / 100)
+    } else {
+        (32768, 8192)
+    };
+    let (mut producer, consumer) = ring::ring(queue_frames * channels);
     let control = Arc::new(Control {
         ticket,
         latest,
@@ -244,7 +251,7 @@ fn start(
         .spawn(move || {
             let _completion = DecoderCompletion(c.clone());
             let result = (|| {
-                let mut block = vec![0f32; 8192 * channels];
+                let mut block = vec![0f32; block_frames * channels];
                 while !c.cancelled() {
                     let frames = reader.read_frames(&mut block)?;
                     if frames == 0 {
@@ -271,8 +278,14 @@ fn start(
     let w = wake.clone();
     let render = match thread::Builder::new()
         .name("wasapi-render".into())
-        .spawn(move || unsafe { render(request, start, consumer, c, w, progress) })
-    {
+        .spawn(move || unsafe {
+            let gate = request.gate.clone();
+            let result = render(request, start, consumer, c, w, progress);
+            if let Some(gate) = gate {
+                gate.finish_output(result.as_ref().is_ok_and(|ended| *ended));
+            }
+            result
+        }) {
         Ok(thread) => thread,
         Err(e) => {
             control.cancel.store(true, Ordering::Release);
@@ -315,6 +328,7 @@ unsafe fn render(
         let channels = usize::from(request.timeline.info().channels);
         let mut submitted = 0u64;
         let mut running = false;
+        let mut start_phase = 0u32;
         let mut underrun = false;
         loop {
             if control.cancelled() {
@@ -381,6 +395,14 @@ unsafe fn render(
                     return Ok(true);
                 }
                 if !running && submitted > 0 {
+                    start_phase += 1;
+                    if let Some(gate) = &request.gate {
+                        gate.wait(1, start_phase, || control.cancelled())
+                            .map_err(|_| Failure {
+                                operation: "Input/output synchronization cancelled or timed out",
+                                code: 0,
+                            })?;
+                    }
                     api(stream.client.Start(), "Start output")?;
                     running = true;
                 }
