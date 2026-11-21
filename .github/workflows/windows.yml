@@ -45,13 +45,9 @@ jobs:
       - name: Test without audio hardware
         run: cargo test --workspace --locked
       - name: Build Windows executable
-        run: |
-          $library = Get-ChildItem target/debug/build/openssl-sys-*/out/openssl-build/install/lib/libcrypto.lib | Select-Object -First 1
-          if (-not $library) { throw 'Static OpenSSL was not built during validation.' }
-          $env:OPENSSL_DIR = $library.Directory.Parent.FullName
-          $env:OPENSSL_STATIC = '1'
-          $env:OPENSSL_NO_VENDOR = '1'
-          cargo build --release --workspace --locked
+        env:
+          OPENSSL_NO_VENDOR: '0'
+        run: cargo build --release --workspace --locked
       - name: Prepare portable development build
         run: |
           ./tools/package.ps1
