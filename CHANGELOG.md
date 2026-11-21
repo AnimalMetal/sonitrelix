@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Updated the documentation, license notices, and English and Spanish About text.
+
 ## 0.6.0 — first Windows release
 
 - The portable Windows ZIP includes FFmpeg for additional import and export formats and audio effects.

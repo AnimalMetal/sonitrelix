@@ -1,6 +1,6 @@
 # Third-party notices
 
-Sonitrelix original code is MIT licensed. No Elion source is included. Dependency licenses were reviewed against the actual resolved Cargo metadata and retained license files before choosing MIT for this foundation. These permissive licenses allow the original application to remain MIT; dependency notices and Unicode data terms remain applicable.
+Sonitrelix original code is MIT licensed. Dependency licenses were reviewed against the actual resolved Cargo metadata and retained license files before choosing MIT for this foundation. These permissive licenses allow the original application to remain MIT; dependency notices and Unicode data terms remain applicable.
 
 | Locked package | Version | Declared license |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Select the MIT option where offered, retaining the Unicode-3.0 terms for unicode
 
 The Microsoft [windows-rs](https://github.com/microsoft/windows-rs) bindings are now linked for WASAPI and Windows threading. The current graph contains 31 external packages; full supplied notices and metadata were retained. The WAV reader and SPSC queue are original Sonitrelix code. CPAL, Symphonia, Hound and Rubato remain candidates, not linked dependencies; their exact graphs must be audited if added.
 
-OpenSSL 3.6.3 is statically linked for Ed25519, SHA-256 and random bytes. Its Apache-2.0 license is retained in third-party-licenses/OpenSSL-3.6.3-LICENSE.txt; build/wrapper licenses are separate. No AGPL code is linked.
+OpenSSL 3.6.3 is statically linked for Ed25519, SHA-256 and random bytes. Its Apache-2.0 license is retained in third-party-licenses/OpenSSL-3.6.3-LICENSE.txt; build/wrapper licenses are separate.
 
 Portable packages include unmodified release vcruntime140 DLLs from Visual Studio designated x64 redistributables under Microsoft terms, not MIT. See https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution and https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files. Only appropriately licensed redistributables may be packaged. Other Windows DLLs and Media Foundation codecs are not bundled. Original PCM WAV/FLAC code needs no external codec library; FLAC follows RFC 9639.
 

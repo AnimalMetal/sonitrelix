@@ -6,10 +6,6 @@ The mixer crate builds immutable mixed timelines. Worker-side windowed-sinc resa
 
 # Architecture decisions — current build 0.5.0
 
-## Reference review
-
-Reviewed 2026-11-20: [Elion README](https://github.com/Elion-Daw/Elion), [BUILDING](https://github.com/Elion-Daw/Elion/blob/main/BUILDING.md), [LICENSES](https://github.com/Elion-Daw/Elion/blob/main/LICENSES.md). Its principles support short, discoverable keyboard workflows and non-destructive editing. Its documented current platform is macOS/VoiceOver, with Windows readers planned; its UI is not evidence that a Windows port would satisfy NVDA/JAWS. Elion uses C++ JUCE/Tracktion, pinned submodules and reviewed patches. Sonitrelix uses none of its implementation or dependencies.
-
 ## UI choice
 
 Direct Win32 standard controls: menu, BUTTON, LISTBOX, EDIT, STATIC, and common file dialogs. These have native Windows accessibility proxies; labels immediately precede fields under the same parent. [Microsoft documents this naming requirement](https://learn.microsoft.com/en-us/windows/win32/winauto/ensure-that-ui-elements-are-named-correctly). This is a credible MSAA/UIA bridge plan, not an accessibility certification. No custom synthesizer or screen-reader add-on. Track rows include each stored state in their text.
