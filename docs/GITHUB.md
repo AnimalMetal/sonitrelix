@@ -4,7 +4,7 @@ The [Sonitrelix repository](https://github.com/AnimalMetal/sonitrelix) runs form
 
 1. Check the workspace version, review the actual files going into Git, and run the checks in BUILDING.md.
 2. Use a build directory with a non-personal path for native OpenSSL. Build the release executable, and audit its embedded strings for local paths before making it public.
-3. Build FFmpeg as described in FFMPEG_BUILD.md and run the FFmpeg integration tests from VALIDATION.md. Run `tools/package.ps1 -FFmpegBuild target/ffmpeg-release` to produce the portable ZIP and corresponding source ZIP.
+3. Build FFmpeg as described in FFMPEG_BUILD.md and run the FFmpeg integration tests. Run `tools/package.ps1` with `-FFmpegBuild`, `-WinpthreadsRuntime`, and the reviewed `-Executable` to produce the portable ZIP and corresponding source ZIP.
 4. Sign the exact executable in the portable ZIP as described in UPDATES.md. Verify the signature, package contents, and SHA-256 checksums before publishing.
 5. Push the reviewed commit and tag it `v<version>`. Create a draft GitHub release and attach the portable ZIP, corresponding source ZIP, update executable, update manifest and checksums. Verify the draft assets before publishing.
 

@@ -1,6 +1,7 @@
 param(
     [string]$Executable = 'target/release/Sonitrelix.exe',
-    [string]$FFmpegBuild
+    [string]$FFmpegBuild,
+    [string]$WinpthreadsRuntime
 )
 $ErrorActionPreference = 'Stop'
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -23,13 +24,20 @@ foreach ($folder in @('docs','third-party-licenses')) {
 }
 if ($FFmpegBuild) {
     $ffmpeg = (Resolve-Path -LiteralPath $FFmpegBuild).Path
+    if (-not $WinpthreadsRuntime) { throw 'Specify the Winpthreads runtime that was used to build FFmpeg.' }
+    $runtime = (Resolve-Path -LiteralPath $WinpthreadsRuntime).Path
+    if ((Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash -ne '4bde68fbb2c6a9a64535928fc505056ebf6f5dc44f82ea2eaac3c714dc22ce79') {
+        throw 'Unexpected Winpthreads runtime. See docs/FFMPEG_BUILD.md.'
+    }
     Copy-Item -LiteralPath (Join-Path $ffmpeg 'ffmpeg-9.0.2/ffmpeg.exe') -Destination $program
+    Copy-Item -LiteralPath $runtime -Destination (Join-Path $program 'libwinpthread-1.dll')
     $licenses = @{
         'FFmpeg-LICENSE.md'   = 'ffmpeg-9.0.2/LICENSE.md'
         'FFmpeg-LGPL-2.1.txt' = 'ffmpeg-9.0.2/COPYING.LGPLv2.1'
         'LAME-LICENSE.txt'    = 'lame-3.100/LICENSE'
         'LAME-COPYING.txt'    = 'lame-3.100/COPYING'
         'Opus-COPYING.txt'    = 'opus-1.6.1/COPYING'
+        'Winpthreads-COPYING.txt' = 'mingw-w64-11.0.1/mingw-w64-libraries/winpthreads/COPYING'
     }
     foreach ($name in $licenses.Keys) {
         Copy-Item -LiteralPath (Join-Path $ffmpeg $licenses[$name]) -Destination (Join-Path $program "third-party-licenses/$name")
@@ -40,7 +48,7 @@ if ($FFmpegBuild) {
     )
     $sources = Get-Content -LiteralPath (Join-Path $workspace 'docs/FFMPEG_BUILD.md') |
         Select-String '^([0-9a-f]{64})  ([a-zA-Z0-9._-]+)$'
-    if ($sources.Count -ne 3) { throw 'Expected three corresponding source archives.' }
+    if ($sources.Count -ne 4) { throw 'Expected four corresponding source archives.' }
     foreach ($source in $sources) {
         $path = Join-Path $ffmpeg $source.Matches[0].Groups[2].Value
         $expected = $source.Matches[0].Groups[1].Value

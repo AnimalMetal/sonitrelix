@@ -16,8 +16,11 @@ case "${1:-}" in
     "$make_command" install
     ;;
   opus)
+    opus_source=$(cygpath -m "$root/opus-1.6.1")
+    opus_source_native=$(cygpath -w "$root/opus-1.6.1")
     cmake -S opus-1.6.1 -B opus-build -G "MinGW Makefiles" \
       -DCMAKE_C_COMPILER=gcc -DCMAKE_INSTALL_PREFIX="$prefix" \
+      "-DCMAKE_C_FLAGS:STRING=-ffile-prefix-map=\"$opus_source\"=opus-1.6.1 -ffile-prefix-map=\"$opus_source_native\"=opus-1.6.1" \
       -DCMAKE_BUILD_TYPE=Release -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF
     cmake --build opus-build --parallel "$jobs"
     cmake --install opus-build
