@@ -58,7 +58,7 @@ pub(super) struct Checker {
     quiet: bool,
     next_check: Option<std::time::Instant>,
     skipped: Option<String>,
-    state_job: Option<Receiver<Result<(), String>>>,
+    state_job: Option<Receiver<Result<String, String>>>,
 }
 fn parse(status: u32, bytes: &[u8], current: &str) -> Result<Report, String> {
     if bytes.len() > LIMIT {
@@ -329,6 +329,7 @@ pub(super) fn install_text(strings: &mut serde_json::Value, report: Option<&Repo
         env!("CARGO_PKG_VERSION")
     ));
     strings["update_url"] = serde_json::Value::String(url);
+    strings["update_skipped_here"] = false.into();
     strings["update_can_install"] = serde_json::Value::Bool(matches!(
         report,
         Some(Report::Available {
@@ -339,6 +340,44 @@ pub(super) fn install_text(strings: &mut serde_json::Value, report: Option<&Repo
     ));
 }
 impl App {
+    pub(super) fn sync_update_action_flags(&mut self) {
+        self.strings["update_downloading"] = self.updates.install_job.is_some().into();
+        self.strings["update_saving_skip"] = self.updates.state_job.is_some().into();
+    }
+
+    unsafe fn refresh_update_actions(&mut self) {
+        unsafe {
+            self.sync_update_action_flags();
+            if let Some(viewer) = self.help.as_mut().filter(|v| v.is_updates()) {
+                viewer.update(self.strings.clone());
+            }
+        }
+    }
+
+    unsafe fn update_status(&self, text: &str, focus: bool) {
+        unsafe {
+            self.status(text);
+            if let Some(viewer) = self.help.as_ref().filter(|v| v.is_updates()) {
+                let status = GetDlgItem(viewer.hwnd, 906);
+                SetWindowTextW(status, wide(text).as_ptr());
+                if focus {
+                    SetFocus(status);
+                } else {
+                    announcement::announce(status, text);
+                }
+            }
+        }
+    }
+
+    pub(super) unsafe fn cancel_update_download(&self) {
+        unsafe {
+            if self.updates.install_job.is_some() {
+                self.updates.cancel();
+                self.update_status(&self.t("update_cancelling"), false);
+            }
+        }
+    }
+
     pub(super) unsafe fn offer_update_result(&mut self) {
         let path = self.data.join("update-result.txt");
         if let Ok(meta) = fs::metadata(&path)
@@ -368,7 +407,6 @@ impl App {
     pub(super) unsafe fn install_update(&mut self) {
         unsafe {
             if self.updates.pending() {
-                self.updates.cancel();
                 return;
             }
             if let Some(plan) = self.updates.plan_ready.take() {
@@ -381,7 +419,7 @@ impl App {
                 ..
             }) = &self.updates.report
             else {
-                self.status(&self.t("update_not_signed"));
+                self.update_status(&self.t("update_not_signed"), true);
                 return;
             };
             let envelope = envelope.clone();
@@ -421,13 +459,13 @@ impl App {
                 }) {
                 Ok(_) => {
                     self.updates.install_job = Some(rx);
-                    self.strings["update_downloading"] = true.into();
-                    if let Some(viewer) = self.help.as_mut() {
-                        viewer.update(self.strings.clone());
-                    }
-                    self.status(&self.t("update_downloading_text"));
+                    self.refresh_update_actions();
+                    self.update_status(&self.t("update_downloading_text"), false);
                 }
-                Err(e) => self.error(e),
+                Err(e) => {
+                    self.log_error("start update download", &e);
+                    self.update_status(&format!("{} {e}", self.t("update_install_failed")), true);
+                }
             }
         }
     }
@@ -438,17 +476,19 @@ impl App {
             }
             if self.recording.is_some() || !self.can_close() {
                 self.updates.plan_ready = Some(plan);
-                self.status(&self.t("update_ready"));
+                self.update_status(&self.t("update_ready"), true);
                 return;
             }
             match sonitrelix_updater::launch_helper(&plan) {
                 Ok(()) => {
+                    self.update_status(&self.t("update_restarting"), false);
                     self.dirty = false;
                     self.close_audio();
                 }
                 Err(e) => {
                     self.updates.plan_ready = Some(plan);
-                    self.error(e);
+                    self.log_error("launch updater", &e);
+                    self.update_status(&format!("{} {e}", self.t("update_install_failed")), true);
                 }
             }
         }
@@ -456,50 +496,62 @@ impl App {
     unsafe fn poll_install(&mut self) {
         unsafe {
             if let Some(result) = self.updates.state_job.as_ref().map(|r| r.try_recv()) {
-                match result {
-                    Ok(r) => {
-                        self.updates.state_job = None;
-                        if let Err(e) = r {
-                            self.status(&e);
-                            self.log_error("save update preference", e);
+                let result = match result {
+                    Ok(r) => Some(r),
+                    Err(TryRecvError::Disconnected) => Some(Err(self.t("update_action_failed"))),
+                    Err(TryRecvError::Empty) => None,
+                };
+                if let Some(result) = result {
+                    self.updates.state_job = None;
+                    let text = match result {
+                        Ok(tag) => {
+                            self.updates.skipped = Some(tag);
+                            self.strings["update_skipped_here"] = true.into();
+                            self.t("update_skipped")
                         }
-                    }
-                    Err(TryRecvError::Disconnected) => self.updates.state_job = None,
-                    Err(TryRecvError::Empty) => (),
+                        Err(e) => {
+                            self.log_error("save update preference", &e);
+                            format!("{} {e}", self.t("update_skip_failed"))
+                        }
+                    };
+                    self.refresh_update_actions();
+                    self.update_status(&text, true);
                 }
             }
             let result = self.updates.install_job.as_ref().map(|r| r.try_recv());
             let result = match result {
                 Some(Ok(r)) => Some(r),
-                Some(Err(TryRecvError::Disconnected)) => Some(Err(self.t("update_error"))),
+                Some(Err(TryRecvError::Disconnected)) => Some(Err(self.t("update_action_failed"))),
                 _ => None,
             };
             if let Some(result) = result {
                 self.updates.install_job = None;
-                self.strings["update_downloading"] = false.into();
-                if let Some(viewer) = self.help.as_mut() {
-                    viewer.update(self.strings.clone());
-                }
+                self.refresh_update_actions();
+                let cancelled = self
+                    .updates
+                    .cancel
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 match result {
+                    _ if cancelled => {
+                        if !self.playback.closing {
+                            self.update_status(&self.t("update_cancelled"), true);
+                        }
+                    }
                     Ok(plan) => self.finish_update(plan),
                     Err(e) => {
                         if !self.playback.closing {
-                            if !self
-                                .updates
-                                .cancel
-                                .load(std::sync::atomic::Ordering::Relaxed)
-                            {
-                                self.log_error("download or stage update", &e);
-                            }
-                            self.status(&format!("{}: {e}", self.t("update_error")));
-                            if let Some(viewer) = self.help.as_ref().filter(|v| v.is_updates()) {
-                                SetWindowTextW(GetDlgItem(viewer.hwnd, 906), wide(&e).as_ptr());
-                                SetFocus(GetDlgItem(viewer.hwnd, 906));
-                            }
+                            self.log_error("download or stage update", &e);
+                            let text = format!("{} {e}", self.t("update_install_failed"));
+                            self.update_status(&text, true);
                         }
                     }
                 }
-            } else if self.updates.pending() {
+            } else if self.updates.install_job.is_some()
+                && !self
+                    .updates
+                    .cancel
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            {
                 let p = self
                     .updates
                     .progress
@@ -509,10 +561,7 @@ impl App {
                 if p > self.updates.milestone {
                     self.updates.milestone = p;
                     let text = format!("{} {p}%", self.t("update_downloading_text"));
-                    self.status(&text);
-                    if let Some(v) = self.help.as_ref().filter(|v| v.is_updates()) {
-                        SetWindowTextW(GetDlgItem(v.hwnd, 906), wide(&text).as_ptr());
-                    }
+                    self.update_status(&text, false);
                 }
             }
         }
@@ -565,6 +614,9 @@ impl App {
                 return;
             }
             self.poll_scheduled();
+            if self.updates.pending() {
+                return;
+            }
             if self.updates.quiet
                 && !matches!(
                     self.playback.state,
@@ -665,11 +717,11 @@ impl App {
             let Some(Report::Available { tag, .. }) = &self.updates.report else {
                 return;
             };
-            if self.updates.pending() {
+            if self.updates.pending() || self.strings["update_skipped_here"].as_bool() == Some(true)
+            {
                 return;
             }
             let tag = tag.clone();
-            self.updates.skipped = Some(tag.clone());
             let path = self.data.join("update-skipped.json");
             let (tx, rx) = mpsc::channel();
             self.updates.state_job = Some(rx);
@@ -678,20 +730,18 @@ impl App {
                 .spawn(move || {
                     let r =
                         sonitrelix_session::atomic_write(&path, &serde_json::to_vec(&tag).unwrap())
+                            .map(|()| tag)
                             .map_err(|e| e.to_string());
                     let _ = tx.send(r);
                 })
             {
                 self.updates.state_job = None;
-                self.error(e);
+                self.log_error("start saving update preference", &e);
+                self.update_status(&format!("{} {e}", self.t("update_skip_failed")), true);
                 return;
             }
-            let text = self.t("update_skipped");
-            self.status(&text);
-            if let Some(viewer) = self.help.as_ref().filter(|v| v.is_updates()) {
-                SetWindowTextW(GetDlgItem(viewer.hwnd, 906), wide(&text).as_ptr());
-                SetFocus(GetDlgItem(viewer.hwnd, 906));
-            }
+            self.refresh_update_actions();
+            self.update_status(&self.t("update_saving_skip_text"), true);
         }
     }
 }

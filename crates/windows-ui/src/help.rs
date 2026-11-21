@@ -25,6 +25,7 @@ impl Document {
     }
 }
 struct View {
+    owner: HWND,
     document: Document,
     focus: i32,
     text: String,
@@ -139,6 +140,14 @@ impl View {
                 } else {
                     0
                 },
+            );
+            let downloading = self.strings["update_downloading"].as_bool() == Some(true);
+            let saving_skip = self.strings["update_saving_skip"].as_bool() == Some(true);
+            let skipped = self.strings["update_skipped_here"].as_bool() == Some(true);
+            EnableWindow(GetDlgItem(h, 911), i32::from(!saving_skip));
+            EnableWindow(
+                GetDlgItem(h, 912),
+                i32::from(!downloading && !saving_skip && !skipped),
             );
             layout(h);
         }
@@ -264,21 +273,21 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
                 return 0;
             }
             if !ptr.is_null() {
-                if id == 911 && w >> 16 == 0 {
-                    PostMessageW(
-                        GetParent(h),
-                        0x111,
-                        if (&(*ptr).strings)["update_downloading"].as_bool() == Some(true) {
-                            super::updates::CANCEL
-                        } else {
-                            super::updates::INSTALL
-                        },
-                        0,
-                    );
-                    return 0;
-                }
-                if id == 912 && w >> 16 == 0 {
-                    PostMessageW(GetParent(h), 0x111, super::updates::SKIP, 0);
+                if matches!(id, 911 | 912) && w >> 16 == 0 && (*ptr).document == Document::Updates {
+                    let view = &*ptr;
+                    let command = if id == 912 {
+                        super::updates::SKIP
+                    } else if view.strings["update_downloading"].as_bool() == Some(true) {
+                        super::updates::CANCEL
+                    } else {
+                        super::updates::INSTALL
+                    };
+                    // This top-level window has an owner, rather than a child-window parent.
+                    if view.owner.is_null() || PostMessageW(view.owner, 0x111, command, 0) == 0 {
+                        let status = GetDlgItem(h, 906);
+                        SetWindowTextW(status, wide(&view.t("update_action_failed")).as_ptr());
+                        SetFocus(status);
+                    }
                     return 0;
                 }
                 if id == 910 && w >> 16 == 0 {
@@ -456,6 +465,7 @@ impl Viewer {
                 }
             }
             let mut context = Box::new(View {
+                owner,
                 document,
                 focus,
                 text: String::new(),

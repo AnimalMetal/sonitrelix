@@ -149,6 +149,13 @@ pub fn prepare(root: &Path, envelope: &[u8], package: &Path, old_pid: u32) -> io
     copy_new(package, &directory.join("package.exe"))?;
     verify_package(&directory.join("package.exe"), &m)?;
     copy_new(&std::env::current_exe()?, &directory.join("helper.exe"))?;
+    // The helper starts from its own directory on a machine that may only have app-local CRT DLLs.
+    for name in ["vcruntime140.dll", "vcruntime140_1.dll"] {
+        let source = plan.root.join(name);
+        if source.is_file() {
+            copy_new(&source, &directory.join(name))?;
+        }
+    }
     let path = directory.join("plan.json");
     write_new(&path, &serde_json::to_vec(&plan)?)?;
     Ok(path)

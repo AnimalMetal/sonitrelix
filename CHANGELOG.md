@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3
+
+- Fixed Install update, Cancel transfer, and Skip this version in the update window. The window now reports download progress, skip confirmation, and errors.
+
 ## 0.6.2
 
 - Added Alt+Arrow shortcuts in Tracks to adjust the selected track's volume and pan during playback.

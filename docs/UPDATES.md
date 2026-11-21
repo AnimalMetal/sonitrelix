@@ -15,7 +15,7 @@ The private key is data/signing/update-ed25519.pem. Keep a secure offline backup
 3. With Python 3.11+ and cryptography, sign without executing the downloaded artifact:
 
 ```powershell
-python tools/release_manifest.py sign --exe path/to/Sonitrelix.exe --version 0.6.2 --output update.json --notes-en "Release notes" --notes-es "Novedades"
+python tools/release_manifest.py sign --exe path/to/Sonitrelix.exe --version 0.6.3 --output update.json --notes-en "Release notes" --notes-es "Novedades"
 ```
 
 4. Upload update.json beside the exact signed Sonitrelix.exe. Verify that the portable ZIP contains that same executable and complete the release checks before publishing.

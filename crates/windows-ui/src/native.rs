@@ -647,10 +647,7 @@ impl App {
             }
             match id {
                 updates::INSTALL => self.install_update(),
-                updates::CANCEL => {
-                    self.updates.cancel();
-                    self.status(&self.t("update_cancelling"));
-                }
+                updates::CANCEL => self.cancel_update_download(),
                 updates::SKIP => self.skip_update(),
                 id if (maintenance::FIRST..maintenance::FIRST + 10).contains(&id) => {
                     self.open_recent(id - maintenance::FIRST)
@@ -874,8 +871,11 @@ impl App {
             self.verbose = store.settings.accessibility.detailed_time;
             self.store = store;
             if language_changed {
+                let skipped_here = self.strings["update_skipped_here"].clone();
                 self.strings = load_strings(self.es);
                 updates::install_text(&mut self.strings, self.updates.report.as_ref());
+                self.strings["update_skipped_here"] = skipped_here;
+                self.sync_update_action_flags();
                 if let Some(viewer) = self.help.as_mut().filter(|h| IsWindow(h.hwnd) != 0) {
                     viewer.update(self.strings.clone());
                 }
@@ -1392,6 +1392,71 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    unsafe fn exercise_update_buttons(app: &mut App) {
+        #[link(name = "user32")]
+        unsafe extern "system" {
+            fn PeekMessageW(msg: *mut MSG, hwnd: HWND, min: u32, max: u32, remove: u32) -> i32;
+        }
+        unsafe {
+            let tag = "v9.9.9";
+            app.updates.report = Some(updates::Report::Available {
+                tag: tag.into(),
+                notes: "Update button test".into(),
+                url: format!("https://github.com/AnimalMetal/sonitrelix/releases/tag/{tag}"),
+                envelope: Some("invalid test manifest".into()),
+                installable: true,
+                warning: String::new(),
+            });
+            updates::install_text(&mut app.strings, app.updates.report.as_ref());
+            let viewer =
+                help::Viewer::open(app.hwnd, app.strings.clone(), help::Document::Updates).unwrap();
+            let window = viewer.hwnd;
+            app.help = Some(viewer);
+            let status = || {
+                let mut buffer = [0u16; 512];
+                let length = GetWindowTextW(
+                    GetDlgItem(window, 906),
+                    buffer.as_mut_ptr(),
+                    buffer.len() as i32,
+                );
+                String::from_utf16_lossy(&buffer[..length as usize])
+            };
+            let click = |owner, id, command| {
+                SendMessageW(window, 0x111, id, GetDlgItem(window, id as i32) as isize);
+                let mut msg = MSG::default();
+                assert_ne!(
+                    PeekMessageW(&mut msg, owner, 0x111, 0x111, 1),
+                    0,
+                    "update button must post to its owner"
+                );
+                assert_eq!(msg.wParam, command);
+                DispatchMessageW(&msg);
+            };
+            let finish = |app: &mut App| {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while app.updates.pending() {
+                    assert!(std::time::Instant::now() < deadline);
+                    app.poll_updates();
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            };
+            click(app.hwnd, 911, updates::INSTALL);
+            assert_eq!(status(), app.t("update_downloading_text"));
+            finish(app);
+            assert!(status().starts_with(&app.t("update_install_failed")));
+            click(app.hwnd, 911, updates::INSTALL);
+            click(app.hwnd, 911, updates::CANCEL);
+            assert_eq!(status(), app.t("update_cancelling"));
+            finish(app);
+            assert_eq!(status(), app.t("update_cancelled"));
+            click(app.hwnd, 912, updates::SKIP);
+            assert_eq!(status(), app.t("update_saving_skip_text"));
+            finish(app);
+            assert_eq!(status(), app.t("update_skipped"));
+            let saved = fs::read(app.data.join("update-skipped.json")).unwrap();
+            assert_eq!(serde_json::from_slice::<String>(&saved).unwrap(), tag);
+        }
+    }
     #[test]
     fn translations_are_complete_and_nonempty() {
         let en = load_strings(false);
@@ -1741,6 +1806,8 @@ mod tests {
                 let n = GetWindowTextW(viewer.hwnd, text.as_mut_ptr(), text.len() as i32);
                 assert_eq!(String::from_utf16_lossy(&text[..n as usize]), app.t(title));
             }
+            app.help = None;
+            exercise_update_buttons(&mut app);
             app.help = None;
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
             while app.maintenance.pending() {
