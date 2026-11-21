@@ -19,19 +19,42 @@ pub struct Timeline {
     mix: Vec<MixTrack>,
     live_mix: Option<LiveMix>,
 }
-/// Audibility for the decode worker. The render thread consumes PCM only.
+/// Track controls for the decode worker. The render thread consumes PCM only.
 #[derive(Clone, Debug)]
-pub struct LiveMix(std::sync::Arc<std::sync::RwLock<Vec<bool>>>);
+pub struct LiveMix(std::sync::Arc<std::sync::RwLock<Vec<LiveTrack>>>);
+
+#[derive(Clone, Copy, Debug)]
+struct LiveTrack {
+    audible: bool,
+    levels: Option<(f32, f32)>,
+}
 
 impl LiveMix {
     pub fn new(audible: Vec<bool>) -> Self {
-        Self(std::sync::Arc::new(std::sync::RwLock::new(audible)))
+        Self(std::sync::Arc::new(std::sync::RwLock::new(
+            audible
+                .into_iter()
+                .map(|audible| LiveTrack {
+                    audible,
+                    levels: None,
+                })
+                .collect(),
+        )))
     }
 
     pub fn update(&self, audible: impl Iterator<Item = bool>) {
         let mut current = self.0.write().unwrap();
         for (value, enabled) in current.iter_mut().zip(audible) {
-            *value = enabled;
+            value.audible = enabled;
+        }
+    }
+
+    pub fn set_levels(&self, index: usize, gain: f32, pan: f32) {
+        if (0. ..=16.).contains(&gain)
+            && (-1. ..=1.).contains(&pan)
+            && let Some(track) = self.0.write().unwrap().get_mut(index)
+        {
+            track.levels = Some((gain, pan));
         }
     }
 }
@@ -169,7 +192,7 @@ pub struct TimelineReader {
     reader_source: Option<Source>,
     mix: Vec<Resampled>,
     mix_position: u64,
-    audible: Vec<bool>,
+    live_tracks: Vec<LiveTrack>,
 }
 fn resampler(source: u32, target: u32) -> Vec<Vec<f32>> {
     if source == target {
@@ -212,6 +235,16 @@ struct Resampled {
     right: f32,
     coefficients: Vec<Vec<f32>>,
 }
+fn channel_levels(channels: u16, gain: f32, pan: f32) -> (f32, f32) {
+    let (left, right) = if channels == 1 {
+        let angle = (pan + 1.) * std::f32::consts::FRAC_PI_4;
+        (angle.cos(), angle.sin())
+    } else {
+        ((1. - pan).min(1.), (1. + pan).min(1.))
+    };
+    (left * gain, right * gain)
+}
+
 impl Resampled {
     fn sample(&mut self, frame: u64) -> io::Result<[f32; 2]> {
         let info = self.reader.info();
@@ -239,19 +272,14 @@ impl TimelineReader {
             .mix
             .iter()
             .map(|t| {
-                let (left, right) = if t.timeline.info().channels == 1 {
-                    let angle = (t.pan + 1.) * std::f32::consts::FRAC_PI_4;
-                    (angle.cos(), angle.sin())
-                } else {
-                    ((1. - t.pan).min(1.), (1. + t.pan).min(1.))
-                };
+                let (left, right) = channel_levels(t.timeline.info().channels, t.gain, t.pan);
                 Resampled {
                     reader: Box::new(Self::new(t.timeline.clone())),
                     cache: vec![0.; 8192 * usize::from(t.timeline.info().channels)],
                     start: 0,
                     count: 0,
-                    left: left * t.gain,
-                    right: right * t.gain,
+                    left,
+                    right,
                     coefficients: resampler(
                         t.timeline.info().sample_rate,
                         timeline.info().sample_rate,
@@ -260,7 +288,13 @@ impl TimelineReader {
             })
             .collect();
         Self {
-            audible: vec![true; timeline.mix.len()],
+            live_tracks: vec![
+                LiveTrack {
+                    audible: true,
+                    levels: None
+                };
+                timeline.mix.len()
+            ],
             timeline,
             index: 0,
             within: 0,
@@ -303,11 +337,16 @@ impl TimelineReader {
             out[..n * 2].fill(0.);
             let rate = self.timeline.info().sample_rate;
             if let Some(controls) = &self.timeline.live_mix {
-                self.audible.copy_from_slice(&controls.0.read().unwrap());
+                self.live_tracks
+                    .copy_from_slice(&controls.0.read().unwrap());
             }
-            for (track, enabled) in self.mix.iter_mut().zip(&self.audible) {
-                if !enabled {
+            for (track, state) in self.mix.iter_mut().zip(&self.live_tracks) {
+                if !state.audible {
                     continue;
+                }
+                if let Some((gain, pan)) = state.levels {
+                    (track.left, track.right) =
+                        channel_levels(track.reader.info().channels, gain, pan);
                 }
                 let source_rate = track.reader.info().sample_rate;
                 for i in 0..n {

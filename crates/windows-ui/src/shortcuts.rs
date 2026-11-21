@@ -2,9 +2,15 @@ use super::editing_ui::*;
 use super::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Scope {
+    Tracks,
     Surface,
     Text,
     Other,
+}
+impl Scope {
+    pub(super) fn editing(self) -> bool {
+        matches!(self, Self::Tracks | Self::Surface)
+    }
 }
 pub(super) fn bracket(character: usize) -> Option<usize> {
     match character {
@@ -36,7 +42,15 @@ pub(super) fn route(
 ) -> Option<Action> {
     use Action::*;
     if alt {
-        return if scope == Scope::Surface && shift && !ctrl {
+        return if scope == Scope::Tracks && !shift && !ctrl {
+            match key {
+                0x26 => Some(Command(VOLUME_UP)),
+                0x28 => Some(Command(VOLUME_DOWN)),
+                0x25 => Some(Command(PAN_LEFT)),
+                0x27 => Some(Command(PAN_RIGHT)),
+                _ => None,
+            }
+        } else if scope.editing() && shift && !ctrl {
             match key {
                 0x26 => Some(Command(MOVE_UP)),
                 0x28 => Some(Command(MOVE_DOWN)),
@@ -80,7 +94,7 @@ pub(super) fn route(
             _ => (),
         }
     }
-    if scope != Scope::Surface {
+    if !scope.editing() {
         return None;
     }
     if ctrl {
@@ -141,6 +155,24 @@ pub(super) fn route(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn alt_arrows_adjust_only_the_focused_track_list() {
+        for (label, key, command) in [
+            ("Alt+Up", 0x26, VOLUME_UP),
+            ("Alt+Down", 0x28, VOLUME_DOWN),
+            ("Alt+Left", 0x25, PAN_LEFT),
+            ("Alt+Right", 0x27, PAN_RIGHT),
+        ] {
+            assert!(include_str!("../../../docs/SHORTCUTS.md").contains(label));
+            assert_eq!(
+                route(key, false, false, true, Scope::Tracks),
+                Some(Action::Command(command))
+            );
+            for scope in [Scope::Surface, Scope::Text, Scope::Other] {
+                assert_eq!(route(key, false, false, true, scope), None);
+            }
+        }
+    }
     #[test]
     fn documented_shortcuts_match_commands() {
         let docs = include_str!("../../../docs/SHORTCUTS.md");

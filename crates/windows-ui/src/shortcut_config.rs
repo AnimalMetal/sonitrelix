@@ -129,7 +129,7 @@ pub(super) fn route(
     settings: &sonitrelix_settings::Settings,
 ) -> Option<Action> {
     let default = shortcuts::route(key, ctrl, shift, alt, scope);
-    if scope != Scope::Surface {
+    if !scope.editing() {
         return default;
     }
     let pressed = Chord {

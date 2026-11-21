@@ -57,6 +57,10 @@ const MUTE: usize = 204;
 const SOLO: usize = 205;
 const ARM: usize = 206;
 const LEVELS: usize = 207;
+const VOLUME_UP: usize = 208;
+const VOLUME_DOWN: usize = 209;
+const PAN_LEFT: usize = 210;
+const PAN_RIGHT: usize = 211;
 const UNDO: usize = 301;
 const REDO: usize = 302;
 const PREFERENCES: usize = 404;
@@ -655,6 +659,7 @@ impl App {
                     self.export_audio(id == export_ui::EXPORT_SELECTION)
                 }
                 LEVELS => self.track_levels(),
+                VOLUME_UP | VOLUME_DOWN | PAN_LEFT | PAN_RIGHT => self.nudge_track_levels(id),
                 updates::CHECK => self.check_updates(),
                 effects_ui::EFFECTS => self.effects_dialog(),
                 recording_ui::RECORD => self.record_command(),
@@ -1327,8 +1332,9 @@ pub fn run() {
                 }
                 let mut class = [0u16; 32];
                 let n = GetClassNameW(focus, class.as_mut_ptr(), 32);
-                let scope = if [GetDlgItem(app.hwnd, 11), GetDlgItem(app.hwnd, 25)].contains(&focus)
-                {
+                let scope = if focus == GetDlgItem(app.hwnd, 11) {
+                    shortcuts::Scope::Tracks
+                } else if focus == GetDlgItem(app.hwnd, 25) {
                     shortcuts::Scope::Surface
                 } else if String::from_utf16_lossy(&class[..n.max(0) as usize]) == "Edit" {
                     shortcuts::Scope::Text
@@ -1339,6 +1345,13 @@ pub fn run() {
                     shortcut_config::route(msg.wParam, ctrl, shift, alt, scope, &app.store.settings)
                 {
                     match action {
+                        shortcuts::Action::Command(
+                            id @ (VOLUME_UP | VOLUME_DOWN | PAN_LEFT | PAN_RIGHT),
+                        ) => {
+                            // Let Windows clear the pending Alt-menu activation for this chord.
+                            DefWindowProcW(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+                            app.command(id);
+                        }
                         shortcuts::Action::Command(id) => app.command(id),
                         shortcuts::Action::TogglePlay => app.toggle_playback(),
                         shortcuts::Action::Cursor {
@@ -1531,6 +1544,19 @@ mod tests {
             assert_eq!(app.project.tracks[0].name, "Vocals ñ");
             app.playback.state = sonitrelix_engine::State::Playing;
             let focus = GetFocus();
+            for (command, expected) in [
+                (VOLUME_UP, "Volume 1 dB"),
+                (VOLUME_DOWN, "Volume 0 dB"),
+                (PAN_LEFT, "Pan 5 percent left"),
+                (PAN_RIGHT, "Pan centered"),
+            ] {
+                app.command(command);
+                assert_eq!(app.playback.state, sonitrelix_engine::State::Playing);
+                assert_eq!(app.text(21), expected);
+                assert_eq!(GetFocus(), focus);
+            }
+            assert_eq!(app.project.tracks[0].gain, 1.);
+            assert_eq!(app.project.tracks[0].pan, 0.);
             for (command, expected) in [
                 (ARM, "armed"),
                 (ARM, "unarmed"),

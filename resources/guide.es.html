@@ -1,5 +1,5 @@
 <h1>Guía de Sonitrelix</h1>
-<p class="lead">Desde su primera grabación hasta una mezcla multipista. Para Sonitrelix 0.6.1 en Windows.</p>
+<p class="lead">Desde su primera grabación hasta una mezcla multipista. Para Sonitrelix 0.6.2 en Windows.</p>
 <p>Español · <a href="user-guide.en.html" lang="en" hreflang="en">Read in English</a></p>
 <p>Use Sonitrelix para grabar, editar y mezclar audio conservando los archivos originales. Puede cambiar entre español e inglés en Preferencias.</p>
 <nav aria-label="Contenido de la guía"><h2 id="contents">Contenido</h2><ol>
@@ -60,7 +60,8 @@
 <h3 id="balance">Equilibrar y organizar pistas</h3>
 <p>En Pistas/Fragmentos, M alterna silencio, S solo y A armado. El modo solo se guarda por pista. Si hay pistas con audio en solo y sin silenciar, la mezcla reproduce esas pistas juntas. Una pista vacía o silenciada en solo no silencia las demás pistas.</p>
 <p>El silencio y el solo se aplican durante la reproducción. El cursor sigue avanzando aunque todas las pistas estén en silencio. A, S y M mantienen el foco en la pista. Al activar solo, el estado también indica si la pista está silenciada o vacía, o si hay varias pistas en solo.</p>
-<p>Ctrl+G abre <strong>Volumen y panorama</strong>. Escriba un valor o use el deslizador. El volumen admite de −60 a +24 dB. El panorama va de −100 a la izquierda a +100 a la derecha, con 0 en el centro. Los botones Restablecer devuelven el volumen a 0 dB o el panorama al centro. Pulse Aceptar y escuche la mezcla.</p>
+<p>Ctrl+G abre <strong>Volumen y panorama</strong>. Ajuste los deslizadores con las flechas. El volumen admite de −60 a +24 dB. El panorama va de −100 a la izquierda a +100 a la derecha, con 0 en el centro. Los botones Restablecer devuelven el volumen a 0 dB o el panorama al centro. Pulse Aceptar para confirmar.</p>
+<p>Con el foco en Pistas, Alt+Arriba o Alt+Abajo cambia el volumen de la pista seleccionada en 1 dB. Alt+Izquierda o Alt+Derecha mueve el panorama cinco puntos porcentuales. La reproducción continúa mientras ajusta el valor y Sonitrelix anuncia el nuevo ajuste. Ctrl+Z deshace el cambio.</p>
 <p>Ctrl+Mayús+D duplica la pista. Alt+Mayús+Arriba/Abajo la reordena. Ctrl+Mayús+Supr la elimina del proyecto. Deshacer la restaura; los archivos de origen permanecen en disco.</p>
 </section>
 
@@ -69,8 +70,8 @@
 <ol><li>Elija una pista y, opcionalmente, un intervalo. Sin intervalo, se procesa la pista completa.</li><li>Ctrl+E abre Efectos. Elija el efecto y ajuste sus valores.</li><li>Escuchar reproduce una prueba corta. Detenga la prueba antes de otra comparación.</li><li>Aplicar procesa en segundo plano; Cancelar cierra sin aplicar una edición nueva.</li><li>Escuche el resultado. Ctrl+Z recupera el audio anterior si lo necesita.</li></ol>
 <p>Los efectos generan audio nuevo sin reescribir originales. Son ediciones procesadas que se pueden deshacer, no una cadena de complementos en directo. Escuche el resultado completo antes de exportar.</p>
 <dl><dt>Amplificar y Normalizar</dt><dd>Cambian el nivel. Comience con cambios pequeños. Normalizar ajusta un pico, no la sonoridad percibida.</dd><dt>Fundido de entrada y salida</dt><dd>Aumentan o reducen el nivel a lo largo de la región.</dd><dt>Invertir y Silencio</dt><dd>Invierten el orden de las muestras o sustituyen la región por silencio.</dd><dt>Ecualizador básico</dt><dd>Ajusta graves, medios y agudos.</dd><dt>Compresor</dt><dd>Reduce picos por encima de un umbral. Compare a un nivel de escucha parecido.</dd><dt>Puerta de ruido</dt><dd>Reduce pasajes por debajo del umbral. Un ajuste agresivo puede quitar palabras suaves.</dd><dt>Reverberación</dt><dd>Añade ambiente reverberante. Pruebe poca cantidad para conservar la claridad de la voz.</dd></dl>
-<p>En Efectos y Volumen y panorama, Tab lleva desde cada campo numérico a su botón Restablecer y después al deslizador. Use las flechas para ajustes pequeños o RePág y AvPág para cambios mayores. Escriba en el campo numérico para ajustar valores exactos.</p>
-<p>Active Restablecer con Espacio para recuperar el valor predeterminado de ese ajuste. Se actualizan el campo y el deslizador. Pulse Aplicar en Efectos o Aceptar en Volumen y panorama para confirmar los cambios.</p>
+<p>En Efectos y Volumen y panorama, Tab pasa de cada deslizador a su botón Restablecer. Use las flechas para ajustes pequeños o RePág y AvPág para cambios mayores. Inicio y Fin llevan a los límites.</p>
+<p>Active Restablecer con Espacio para recuperar el valor predeterminado de ese ajuste. Pulse Aplicar en Efectos o Aceptar en Volumen y panorama para confirmar los cambios.</p>
 <h3 id="ffmpeg-effects">Limpiar la voz y ajustar el tempo con FFmpeg</h3>
 <p>Ctrl+E ofrece Reducción de ruido para ruido constante, Reductor de sibilancia para eses fuertes, Eliminar zumbido de 50 o 60 Hz y Cambiar tempo sin alterar el tono. Cambiar tempo desplaza el audio posterior en la pista editada. Use Escuchar, Aplicar y Ctrl+Z.</p>
 <p>Para la Atenuación automática, seleccione el acompañamiento y elija la voz de control en Efectos. La voz atenúa el acompañamiento en los momentos correspondientes. La escucha previa reproduce solo el acompañamiento procesado. Aplicar se puede deshacer. Reproduzca el proyecto para oír ambas pistas.</p>
@@ -170,6 +171,10 @@
 <tr><th scope="row" data-key="S">S</th><td>Alternar solo.</td></tr>
 <tr><th scope="row" data-key="A">A</th><td>Alternar armado para grabación.</td></tr>
 <tr><th scope="row" data-key="Ctrl+G">Ctrl+G</th><td>Abrir Volumen y panorama.</td></tr>
+<tr><th scope="row" data-key="Alt+Up">Alt+Arriba</th><td>Subir 1 dB el volumen de la pista seleccionada.</td></tr>
+<tr><th scope="row" data-key="Alt+Down">Alt+Abajo</th><td>Bajar 1 dB el volumen de la pista seleccionada.</td></tr>
+<tr><th scope="row" data-key="Alt+Left">Alt+Izquierda</th><td>Mover cinco puntos a la izquierda el panorama de la pista seleccionada.</td></tr>
+<tr><th scope="row" data-key="Alt+Right">Alt+Derecha</th><td>Mover cinco puntos a la derecha el panorama de la pista seleccionada.</td></tr>
 </tbody></table>
 <h3 id="keys-dialogs">Preferencias y visor de ayuda</h3>
 <table><caption>Teclas específicas de Preferencias o ayuda de texto</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>

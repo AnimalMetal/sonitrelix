@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn live_solo_states_change_the_pcm_without_resetting_the_reader() {
+    fn live_track_controls_change_pcm_without_resetting_the_reader() {
         use sonitrelix_audio_io::{TimelineReader, WavWriter};
         let temp = std::env::temp_dir();
         let dir = temp.join(format!("sonitrelix-solo-{}", std::process::id()));
@@ -144,29 +144,33 @@ mod tests {
         }
         let (timeline, controls) = live_project(&project).unwrap();
         let mut reader = TimelineReader::new(timeline);
-        let mut assert_next = |expected: f32| {
+        let mut assert_next = |left: f32, right: f32| {
             let mut pcm = [0.; 2];
             assert_eq!(reader.read_frames(&mut pcm).unwrap(), 1);
             assert!(
-                pcm.into_iter().all(|v| (v - expected).abs() < 0.001),
+                (pcm[0] - left).abs() < 0.001 && (pcm[1] - right).abs() < 0.001,
                 "{pcm:?}"
             );
         };
-        assert_next(0.6);
+        assert_next(0.6, 0.6);
+        controls.set_levels(1, 0.5, 1.);
+        assert_next(0.2, 0.4);
         project.tracks[1].solo = true;
         controls.update(audible_tracks(&project));
-        assert_next(0.4);
+        assert_next(0., 0.2);
+        controls.set_levels(1, 1., 0.);
+        assert_next(0.4, 0.4);
         project.tracks[0].solo = true;
         controls.update(audible_tracks(&project));
-        assert_next(0.6);
+        assert_next(0.6, 0.6);
         project.tracks[1].mute = true;
         controls.update(audible_tracks(&project));
-        assert_next(0.2);
+        assert_next(0.2, 0.2);
         project.tracks[0].solo = false;
         project.tracks[1].solo = false;
         project.tracks[1].mute = false;
         controls.update(audible_tracks(&project));
-        assert_next(0.6);
+        assert_next(0.6, 0.6);
         drop(reader);
         assert!(dir.starts_with(temp));
         std::fs::remove_dir_all(dir).unwrap();

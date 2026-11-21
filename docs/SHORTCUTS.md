@@ -1,4 +1,4 @@
-# Keyboard shortcuts / Atajos — 0.6.0
+# Keyboard shortcuts / Atajos — 0.6.2
 
 Audio and track commands act on the selected track when **Tracks or Clips has focus**. In text fields, ordinary typing and Ctrl+A/C/X/V/Z keep Windows text-editing behavior. Ctrl+A never selects all tracks. The clipboard stores Sonitrelix clips internally; it is not the Windows audio clipboard.
 
@@ -33,6 +33,10 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | Escape | Clear audio selection | Quitar selección de audio |
 | F2 | Edit track name; Enter commits, Escape cancels | Renombrar; Intro confirma, Escape cancela |
 | Ctrl+Shift+D | Duplicate track | Duplicar pista |
+| Alt+Up | Raise selected track volume by 1 dB. Track list only. | Subir 1 dB el volumen de la pista seleccionada. Con el foco en Pistas. |
+| Alt+Down | Lower selected track volume by 1 dB. Track list only. | Bajar 1 dB el volumen de la pista seleccionada. Con el foco en Pistas. |
+| Alt+Left | Pan the selected track five points left. Track list only. | Mover cinco puntos a la izquierda el panorama de la pista seleccionada. Con el foco en Pistas. |
+| Alt+Right | Pan the selected track five points right. Track list only. | Mover cinco puntos a la derecha el panorama de la pista seleccionada. Con el foco en Pistas. |
 | Alt+Shift+Up / Alt+Shift+Down | Move track up / down | Subir / bajar pista |
 | Ctrl+Shift+Delete | Delete track | Eliminar pista |
 | M / S / A | Toggle mute / solo / recording arm | Alternar silencio / solo / armado |
@@ -48,9 +52,9 @@ Preferencias: Ctrl+Tab / Ctrl+Mayús+Tab cambia categoría; Tab recorre controle
 
 Preferences > Editing/keyboard customizes 22 editing/track actions; Apply saves. Global project/time/help shortcuts stay fixed. Conflicts/reserved keys are rejected. Ctrl+G adjusts gain/pan; Ctrl+Shift+E exports the mix. Recording plays backing tracks; live input monitoring remains unavailable.
 
-In Effects and Volume and pan, Tab moves from each number field to its Reset button and then its slider. Space activates Reset. Use the arrow keys or Page Up and Page Down on the slider. Confirm with Apply or OK.
+In Effects and Volume and pan, Tab moves from each slider to its Reset button. Space activates Reset. Use the arrow keys or Page Up and Page Down on the slider. Confirm with Apply or OK.
 
-En Efectos y Volumen y panorama, Tab lleva del campo numérico al botón Restablecer y después al deslizador. Espacio restablece ese valor. Use las flechas o RePág y AvPág en el deslizador. Confirme con Aplicar o Aceptar.
+En Efectos y Volumen y panorama, Tab pasa de cada deslizador a su botón Restablecer. Espacio restablece ese valor. Use las flechas o RePág y AvPág en el deslizador. Confirme con Aplicar o Aceptar.
 
 Help > User guide (F1), Changelog and About all open a read-only text viewer with focus in the content. Arrow keys/Page Up/Page Down navigate, Ctrl+A selects all text and Ctrl+C copies. Ctrl+F searches; F3 finds next. Tab reaches section/search controls. Escape closes and returns to the original main control. No audio shortcuts run in this viewer.
 

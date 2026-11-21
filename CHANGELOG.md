@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Added Alt+Arrow shortcuts in Tracks to adjust the selected track's volume and pan during playback.
+- Simplified Volume and pan and Effects to use sliders with individual Reset buttons.
+
 ## 0.6.1
 
 - Updated the documentation, license notices, and English and Spanish About text.

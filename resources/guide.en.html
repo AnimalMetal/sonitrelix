@@ -1,5 +1,5 @@
 <h1>Sonitrelix user guide</h1>
-<p class="lead">From your first recording to a multitrack mix. For Sonitrelix 0.6.1 on Windows.</p>
+<p class="lead">From your first recording to a multitrack mix. For Sonitrelix 0.6.2 on Windows.</p>
 <p>English · <a href="user-guide.es.html" lang="es" hreflang="es">Leer en español</a></p>
 <p>Use Sonitrelix to record, edit and mix audio while preserving your original files. You can switch between English and Spanish in Preferences.</p>
 <nav aria-label="Guide contents"><h2 id="contents">Contents</h2><ol>
@@ -60,7 +60,8 @@
 <h3 id="balance">Balance and organize tracks</h3>
 <p>With Tracks/Clips focused, M toggles mute; S toggles solo; A toggles recording arm. Solo is stored per track. If one or more tracks with audio are soloed and unmuted, the mix plays those tracks together. A muted or empty soloed track does not silence the other tracks.</p>
 <p>Mute and solo take effect during playback. The playhead keeps moving even when all tracks are silent. A, S and M keep focus on your track. Solo feedback can also tell you when the track is muted or empty, or when several tracks are soloed.</p>
-<p>Ctrl+G opens <strong>Volume and pan</strong>. Type a value or use the slider. Volume ranges from −60 to +24 dB. Pan ranges from −100 on the left through 0 at center to +100 on the right. The individual Reset buttons return volume to 0 dB or pan to center. Choose OK to commit, then listen to the mix.</p>
+<p>Ctrl+G opens <strong>Volume and pan</strong>. Adjust the sliders with the arrow keys. Volume ranges from −60 to +24 dB. Pan ranges from −100 on the left through 0 at center to +100 on the right. The individual Reset buttons return volume to 0 dB or pan to center. Choose OK to commit.</p>
+<p>With Tracks focused, press Alt+Up or Alt+Down to change the selected track’s volume by 1 dB. Alt+Left or Alt+Right moves its pan by five percentage points. Playback continues while you adjust. Sonitrelix announces the new value. Ctrl+Z undoes the change.</p>
 <p>Ctrl+Shift+D duplicates a track. Alt+Shift+Up/Down reorders it. Ctrl+Shift+Delete deletes the selected track from the project. Undo restores a removed track; source assets remain on disk.</p>
 </section>
 
@@ -69,8 +70,8 @@
 <ol><li>Select a track and, optionally, a time range. With no selected range, the effect processes the whole track.</li><li>Press Ctrl+E to open Effects. Choose an effect and adjust its settings.</li><li>Use Preview for a short audition, and Stop preview before making another comparison.</li><li>Choose Apply to process in the background. Cancel closes without applying a new edit.</li><li>Listen to the result. Ctrl+Z restores the earlier audio if needed.</li></ol>
 <p>Effects create new audio assets rather than rewriting originals. They are undoable rendered edits, not a live plug-in chain. A preview is only a short excerpt; listen to the full result before exporting.</p>
 <dl><dt>Amplify and Normalize</dt><dd>Change level. Start with small gain changes; normalization sets a peak target, not perceived loudness.</dd><dt>Fade In and Fade Out</dt><dd>Increase or reduce level across the chosen region. Useful for entrances and endings.</dd><dt>Reverse and Silence</dt><dd>Reverse sample order, or replace the region with silence.</dd><dt>Basic EQ</dt><dd>Adjust low, middle and high frequency balance.</dd><dt>Compressor</dt><dd>Reduce peaks above a threshold. Compare the result at a similar listening level.</dd><dt>Noise Gate</dt><dd>Reduce quiet passages below a threshold. An aggressive setting can remove quiet words.</dd><dt>Reverb</dt><dd>Add a reverberant sound. Preview a small amount first so words remain clear.</dd></dl>
-<p>In Effects and Volume and pan, Tab goes from each number field to its Reset button and then its slider. Use the arrow keys for fine slider changes or Page Up and Page Down for larger changes. Type directly into the number field for exact values.</p>
-<p>Activate Reset with Space to restore that setting’s default. Reset updates the field and slider together. Choose Apply in Effects or OK in Volume and pan to commit your changes.</p>
+<p>In Effects and Volume and pan, use Tab to move from each slider to its Reset button. Use the arrow keys for small changes or Page Up and Page Down for larger ones. Home and End jump to the limits.</p>
+<p>Activate Reset with Space to restore that setting’s default. Choose Apply in Effects or OK in Volume and pan to commit your changes.</p>
 <h3 id="ffmpeg-effects">Clean up vocals and adjust tempo with FFmpeg</h3>
 <p>Ctrl+E offers Noise Reduction for steady noise, De-esser for sharp S sounds, De-hum for a 50 or 60 Hz buzz, and Change Tempo for speed changes that preserve pitch. Changing tempo shifts later audio on the edited track. Preview, Apply and Ctrl+Z work as with the built-in effects.</p>
 <p>For Automatic Ducking, select the backing track and choose the controlling voice inside Effects. The voice lowers the backing at matching times. Preview plays the processed backing alone. Apply makes an undoable edit to the backing. Play the project to hear both tracks together.</p>
@@ -170,6 +171,10 @@
 <tr><th scope="row" data-key="S">S</th><td>Toggle solo.</td></tr>
 <tr><th scope="row" data-key="A">A</th><td>Toggle recording arm.</td></tr>
 <tr><th scope="row" data-key="Ctrl+G">Ctrl+G</th><td>Open Volume and pan.</td></tr>
+<tr><th scope="row" data-key="Alt+Up">Alt+Up</th><td>Raise selected track volume by 1 dB.</td></tr>
+<tr><th scope="row" data-key="Alt+Down">Alt+Down</th><td>Lower selected track volume by 1 dB.</td></tr>
+<tr><th scope="row" data-key="Alt+Left">Alt+Left</th><td>Pan the selected track five points left.</td></tr>
+<tr><th scope="row" data-key="Alt+Right">Alt+Right</th><td>Pan the selected track five points right.</td></tr>
 </tbody></table>
 <h3 id="keys-dialogs">Preferences and read-only Help viewer</h3>
 <table><caption>Keys specific to Preferences or native Help</caption><thead><tr><th scope="col">Shortcut key</th><th scope="col">Description</th></tr></thead><tbody>

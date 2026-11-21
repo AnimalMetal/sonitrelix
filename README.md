@@ -1,6 +1,6 @@
 # Sonitrelix
 
-Original Rust, Windows-native audio editor with English/Spanish interfaces. **Current Windows release: 0.6.1.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
+Original Rust, Windows-native audio editor with English/Spanish interfaces. **Current Windows release: 0.6.2.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
 
 Download `Sonitrelix-windows-x64.zip`, extract the whole folder and open `Sonitrelix.exe`. FFmpeg and the required Visual C++ runtime files are included. Press F1 for the user guide. [Windows downloads](https://github.com/AnimalMetal/sonitrelix/releases)
 
@@ -25,7 +25,7 @@ See [building](BUILDING.md), [shortcuts](docs/SHORTCUTS.md), [multitrack test wo
 
 ## Español
 
-Sonitrelix 0.6.1 incluye mezcla multipista, grabación de voz sobre música, tiempos exactos, efectos con reverberación, exportación WAV/MP3/FLAC, preferencias con seis pestañas, atajos configurables, recientes, recuperación y actualizaciones firmadas. La interfaz y guía F1 están en español e inglés.
+Sonitrelix 0.6.2 incluye mezcla multipista, grabación de voz sobre música, tiempos exactos, efectos con reverberación, exportación WAV/MP3/FLAC, preferencias con seis pestañas, atajos configurables, recientes, recuperación y actualizaciones firmadas. La interfaz y guía F1 están en español e inglés.
 
 Importe música con Ctrl+I, cree pista con Ctrl+Mayús+N, nombre con F2, arme con A y grabe/detenga con R. Use auriculares. Ctrl+G ajusta volumen/panorama, Ctrl+E abre efectos y Ctrl+Mayús+E exporta. Conserve los originales y carpetas de audio de data. No hay monitorización directa. El desfase se ajusta manualmente en Preferencias. Siguen pendientes pruebas físicas y con NVDA/JAWS; la accesibilidad no se considera terminada.
 

@@ -205,6 +205,12 @@ impl App {
             controls.update(sonitrelix_mixer::audible_tracks(&self.project));
         }
     }
+    pub(super) fn update_playback_levels(&self, index: usize) {
+        if let Some(controls) = &self.playback.mix_controls {
+            let track = &self.project.tracks[index];
+            controls.set_levels(index, track.gain, track.pan);
+        }
+    }
     pub(super) unsafe fn stop_playback(&mut self) {
         unsafe {
             if let Some(engine) = &self.playback.engine {

@@ -130,18 +130,14 @@ impl Context {
             let fields = parameters(i);
             for n in 0..3 {
                 let field = fields.get(n);
-                let label = GetDlgItem(h, 910 + n as i32 * 2);
-                let edit = GetDlgItem(h, 911 + n as i32 * 2);
                 let slider_label = GetDlgItem(h, SLIDER_BASE + n as i32 * 2);
                 let slider = GetDlgItem(h, SLIDER_BASE + n as i32 * 2 + 1);
                 let reset = GetDlgItem(h, RESET_BASE + n as i32);
-                for control in [label, edit, reset, slider_label, slider] {
+                for control in [slider_label, slider, reset] {
                     ShowWindow(control, if field.is_some() { 5 } else { 0 });
                 }
                 if let Some(field) = field {
                     let title = self.t(field.label);
-                    SetWindowTextW(label, wide(&title).as_ptr());
-                    SetWindowTextW(edit, wide(&field.value.to_string()).as_ptr());
                     self.slider_access.name(
                         reset,
                         &self
@@ -177,22 +173,18 @@ impl Context {
         unsafe {
             let selected = SendMessageW(GetDlgItem(h, 901), 0x147, 0, 0);
             for (n, param) in parameters(selected).iter().enumerate() {
-                let edit_id = 911 + n as i32 * 2;
-                let edit = GetDlgItem(h, edit_id);
                 let slider = GetDlgItem(h, SLIDER_BASE + n as i32 * 2 + 1);
                 if message == 0x114 && l == slider as isize {
-                    param.range.write_to_edit(slider, edit);
-                    return true;
-                }
-                if message == 0x111 && w >> 16 == 0x300 && w & 0xffff == edit_id as usize {
                     param
                         .range
-                        .read_from_edit(slider, edit, &self.slider_access);
+                        .update_accessible_value(slider, &self.slider_access);
                     return true;
                 }
                 if message == 0x111 && w == (RESET_BASE + n as i32) as usize {
+                    param
+                        .range
+                        .set_value(slider, param.value, &self.slider_access);
                     let value = param.value.to_string();
-                    SetWindowTextW(edit, wide(&value).as_ptr());
                     let message = self
                         .t("reset_value_feedback")
                         .replace("{parameter}", &self.t(param.label).replace('&', ""))
@@ -207,22 +199,18 @@ impl Context {
     }
     unsafe fn effect(&self, h: HWND) -> Result<EffectChoice, String> {
         unsafe {
-            let read = |id| -> Result<f32, String> {
-                let mut b = [0u16; 80];
-                let n = GetWindowTextW(GetDlgItem(h, id), b.as_mut_ptr(), 80);
-                String::from_utf16_lossy(&b[..n.max(0) as usize])
-                    .trim()
-                    .replace(',', ".")
-                    .parse()
-                    .map_err(|_| self.t("fx_invalid"))
-            };
             let selected = SendMessageW(GetDlgItem(h, 901), 0x147, 0, 0);
+            let fields = parameters(selected);
+            let read = |index: usize| {
+                let control = GetDlgItem(h, SLIDER_BASE + index as i32 * 2 + 1);
+                fields[index].range.value(control) as f32
+            };
             let filtered = match selected {
-                10 => Some(FilteredEffect::NoiseReduction(read(911)?)),
-                11 => Some(FilteredEffect::DeEsser(read(911)?)),
-                12 => Some(FilteredEffect::DeHum(read(911)?)),
-                13 => Some(FilteredEffect::Tempo(read(911)?)),
-                DUCKING => Some(FilteredEffect::Ducking(read(911)?)),
+                10 => Some(FilteredEffect::NoiseReduction(read(0))),
+                11 => Some(FilteredEffect::DeEsser(read(0))),
+                12 => Some(FilteredEffect::DeHum(read(0))),
+                13 => Some(FilteredEffect::Tempo(read(0))),
+                DUCKING => Some(FilteredEffect::Ducking(read(0))),
                 _ => None,
             };
             if let Some(filtered) = filtered {
@@ -239,31 +227,31 @@ impl Context {
                 return Ok(EffectChoice::Filtered(filtered, voice));
             }
             let effect = match selected {
-                0 => Effect::Amplify(read(911)?),
-                1 => Effect::Normalize(read(911)?),
+                0 => Effect::Amplify(read(0)),
+                1 => Effect::Normalize(read(0)),
                 2 => Effect::FadeIn,
                 3 => Effect::FadeOut,
                 4 => Effect::Reverse,
                 5 => Effect::Silence,
                 6 => Effect::Eq {
-                    low: read(911)?,
-                    mid: read(913)?,
-                    high: read(915)?,
+                    low: read(0),
+                    mid: read(1),
+                    high: read(2),
                 },
                 7 => Effect::Compressor {
-                    threshold: read(911)?,
-                    ratio: read(913)?,
-                    makeup: read(915)?,
+                    threshold: read(0),
+                    ratio: read(1),
+                    makeup: read(2),
                 },
                 8 => Effect::Gate {
-                    threshold: read(911)?,
-                    attack_ms: read(913)?,
-                    release_ms: read(915)?,
+                    threshold: read(0),
+                    attack_ms: read(1),
+                    release_ms: read(2),
                 },
                 9 => Effect::Reverb {
-                    wet: read(911)?,
-                    decay: read(913)?,
-                    tail: read(915)?,
+                    wet: read(0),
+                    decay: read(1),
+                    tail: read(2),
                 },
                 _ => return Err(self.t("fx_invalid")),
             };
@@ -362,9 +350,7 @@ impl Context {
                 Ok(_) => {
                     self.receiver = Some(rx);
                     self.applying = apply;
-                    for id in [
-                        901, 911, 913, 915, 917, 930, 931, 941, 943, 945, 950, 951, 952,
-                    ] {
+                    for id in [901, 917, 930, 931, 941, 943, 945, 950, 951, 952] {
                         EnableWindow(GetDlgItem(h, id), 0);
                     }
                     self.status(h, &self.t("fx_working"));
@@ -384,9 +370,7 @@ impl Context {
                 };
                 if let Some(result) = result {
                     self.receiver = None;
-                    for id in [
-                        901, 911, 913, 915, 917, 930, 931, 941, 943, 945, 950, 951, 952,
-                    ] {
+                    for id in [901, 917, 930, 931, 941, 943, 945, 950, 951, 952] {
                         EnableWindow(GetDlgItem(h, id), 1);
                     }
                     if self.closing {
@@ -568,48 +552,42 @@ unsafe fn open(owner: HWND, context: &mut Context) -> Result<HWND, String> {
                 600,
                 300,
             ),
-            (910, "STATIC", "", 0, 12, 75, 290, 22),
-            (911, "EDIT", "", 0x10000 | 0x800000 | 0x80, 12, 97, 120, 26),
+            (940, "STATIC", "", 0, 12, 75, 600, 22),
+            (941, slider::CLASS, "", slider::STYLE, 12, 97, 435, 26),
             (
                 950,
                 "BUTTON",
                 "reset_value_button",
                 0x10000,
-                145,
+                471,
                 97,
                 145,
                 26,
             ),
-            (940, "STATIC", "", 0, 310, 75, 302, 22),
-            (941, slider::CLASS, "", slider::STYLE, 310, 97, 302, 26),
-            (912, "STATIC", "", 0, 12, 130, 290, 22),
-            (913, "EDIT", "", 0x10000 | 0x800000 | 0x80, 12, 152, 120, 26),
+            (942, "STATIC", "", 0, 12, 130, 600, 22),
+            (943, slider::CLASS, "", slider::STYLE, 12, 152, 435, 26),
             (
                 951,
                 "BUTTON",
                 "reset_value_button",
                 0x10000,
-                145,
+                471,
                 152,
                 145,
                 26,
             ),
-            (942, "STATIC", "", 0, 310, 130, 302, 22),
-            (943, slider::CLASS, "", slider::STYLE, 310, 152, 302, 26),
-            (914, "STATIC", "", 0, 12, 185, 290, 22),
-            (915, "EDIT", "", 0x10000 | 0x800000 | 0x80, 12, 207, 120, 26),
+            (944, "STATIC", "", 0, 12, 185, 600, 22),
+            (945, slider::CLASS, "", slider::STYLE, 12, 207, 435, 26),
             (
                 952,
                 "BUTTON",
                 "reset_value_button",
                 0x10000,
-                145,
+                471,
                 207,
                 145,
                 26,
             ),
-            (944, "STATIC", "", 0, 310, 185, 302, 22),
-            (945, slider::CLASS, "", slider::STYLE, 310, 207, 302, 26),
             (916, "STATIC", "fx_voice_track", 0, 12, 130, 600, 20),
             (
                 917,
@@ -873,7 +851,7 @@ impl App {
 mod tests {
     use super::*;
     #[test]
-    fn native_parameters_validation_and_background_apply() {
+    fn native_parameter_sliders_and_background_apply() {
         unsafe {
             let dir = std::env::temp_dir().join(format!("sonitrelix-fx-ui-{}", std::process::id()));
             fs::create_dir_all(&dir).unwrap();
@@ -945,7 +923,7 @@ mod tests {
                         assert!(!name.is_empty(), "{id}");
                     }
                     let mut mnemonics = std::collections::HashSet::new();
-                    for id in [900, 910, 912, 914, 919, 930, 931, 932, 2] {
+                    for id in [900, 940, 942, 944, 919, 930, 931, 932, 2] {
                         let control = GetDlgItem(h, id);
                         // Parent is hidden in tests, so check the control's own visible style.
                         if GetWindowLongPtrW(control, -16) & 0x10000000 == 0 {
@@ -969,14 +947,13 @@ mod tests {
                 SendMessageW(GetDlgItem(h, 901), 0x14e, 9, 0);
                 c.configure(h);
                 let slider = GetDlgItem(h, 941);
-                let wet = GetDlgItem(h, 911);
-                SetWindowTextW(wet, wide("35.75").as_ptr());
-                assert_eq!(SendMessageW(slider, 0x400, 0, 0), 36);
-                SendMessageW(slider, 0x100, 0x27, 0); // VK_RIGHT, native trackbar keyboard path.
-                let mut value = [0; 16];
-                let n = GetWindowTextW(wet, value.as_mut_ptr(), 16);
-                assert_eq!(String::from_utf16_lossy(&value[..n as usize]), "37");
-                SetWindowTextW(GetDlgItem(h, 913), wide("2.5").as_ptr());
+                assert!(GetDlgItem(h, 911).is_null());
+                SendMessageW(slider, 0x100, 0x27, 0); // Right arrow.
+                assert_eq!(accessibility_tests::name_role_value(slider).2, "31");
+                let decay = GetDlgItem(h, 943);
+                parameters(9)[1]
+                    .range
+                    .set_value(decay, 2.5, &c.slider_access);
                 SendMessageW(
                     h,
                     0x111,
@@ -999,10 +976,6 @@ mod tests {
                     (RESET_BASE + 1) as usize,
                     GetDlgItem(h, RESET_BASE + 1) as isize,
                 );
-                SetWindowTextW(GetDlgItem(h, 911), wide("NaN").as_ptr());
-                c.start(h, true);
-                assert!(c.receiver.is_none());
-                SetWindowTextW(GetDlgItem(h, 911), wide("30").as_ptr());
                 c.start(h, true);
                 assert!(c.receiver.is_some());
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);

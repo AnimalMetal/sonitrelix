@@ -1,4 +1,4 @@
-//! Shared mapping between a native trackbar and its exact numeric text field.
+//! Numeric ranges and accessible values for native trackbars.
 use super::w::*;
 use windows::{
     Win32::{
@@ -46,11 +46,11 @@ pub fn initialize() -> std::io::Result<()> {
 
 #[derive(Clone, Copy)]
 pub struct Range {
-    pub min: f64,
-    pub max: f64,
+    min: f64,
+    max: f64,
     step: f64,
 }
-/// Keep the native Slider role while exposing the same units as the paired edit.
+/// Keep the native Slider role while exposing the value in its own units.
 pub struct AccessibleValues {
     service: Option<IAccPropServices>,
     initialized: bool,
@@ -107,12 +107,13 @@ impl Range {
             ((value - self.min) / self.step).round() as isize
         }
     }
-    unsafe fn set_position(self, handle: HWND, value: f64) {
+    pub unsafe fn set_value(self, handle: HWND, value: f64, access: &AccessibleValues) {
         unsafe {
-            let position = self.position(value);
+            let position = self.position(value.clamp(self.min, self.max));
             if SendMessageW(handle, GET_POS, 0, 0) != position {
                 SendMessageW(handle, SET_POS, 1, position);
             }
+            self.update_accessible_value(handle, access);
         }
     }
     pub unsafe fn configure(
@@ -127,32 +128,20 @@ impl Range {
             SendMessageW(handle, SET_MIN, 0, 0);
             SendMessageW(handle, SET_MAX, 1, self.ticks());
             SendMessageW(handle, SET_PAGE, 0, (self.ticks() / 10).max(1));
-            self.set_position(handle, value);
-            access.annotate(handle, PROPID_ACC_VALUE, &self.value_text(handle));
+            self.set_value(handle, value, access);
         }
     }
-    pub unsafe fn read_from_edit(self, handle: HWND, edit: HWND, access: &AccessibleValues) {
-        unsafe {
-            let mut buffer = [0; 80];
-            let length = GetWindowTextW(edit, buffer.as_mut_ptr(), buffer.len() as i32);
-            let text = String::from_utf16_lossy(&buffer[..length.max(0) as usize]);
-            if let Ok(value) = text.trim().replace(',', ".").parse::<f64>()
-                && (self.min..=self.max).contains(&value)
-            {
-                self.set_position(handle, value);
-                access.annotate(handle, PROPID_ACC_VALUE, &self.value_text(handle));
-            }
-        }
+    pub unsafe fn update_accessible_value(self, handle: HWND, access: &AccessibleValues) {
+        access.annotate(
+            handle,
+            PROPID_ACC_VALUE,
+            &unsafe { self.value(handle) }.to_string(),
+        );
     }
-    pub unsafe fn write_to_edit(self, handle: HWND, edit: HWND) {
-        unsafe {
-            SetWindowTextW(edit, wide(&self.value_text(handle)).as_ptr());
-        }
-    }
-    unsafe fn value_text(self, handle: HWND) -> String {
+    pub unsafe fn value(self, handle: HWND) -> f64 {
         let position = unsafe { SendMessageW(handle, GET_POS, 0, 0) };
         let value = (self.min + position as f64 * self.step).min(self.max);
         // Decimal steps are deliberately bounded to tenths or integer units.
-        ((value * 10.).round() / 10.).to_string()
+        (value * 10.).round() / 10.
     }
 }
