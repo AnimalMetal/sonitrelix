@@ -1,9 +1,11 @@
 //! Streaming selected-file transport. Disk decoding and WASAPI rendering are separate.
 mod gate;
+mod meter;
 #[cfg(windows)]
 pub mod recording;
 mod ring;
 pub use gate::StartGate;
+pub use meter::Level;
 #[cfg(windows)]
 mod wasapi;
 use sonitrelix_audio_io::Timeline;
@@ -75,6 +77,7 @@ struct Progress {
     rate: AtomicU32,
     underruns: AtomicU64,
     device_buffer: AtomicU32,
+    meter: meter::PeakMeter,
 }
 struct Completion(Arc<AtomicBool>);
 impl Drop for Completion {
@@ -92,6 +95,7 @@ impl Progress {
             rate: AtomicU32::new(48000),
             underruns: AtomicU64::new(0),
             device_buffer: AtomicU32::new(0),
+            meter: Default::default(),
         }
     }
     fn state(&self, state: State) {
@@ -195,6 +199,9 @@ impl Engine {
     }
     pub fn snapshot(&self) -> Snapshot {
         self.progress.snapshot()
+    }
+    pub fn output_level(&self) -> Level {
+        self.progress.meter.read()
     }
     pub fn try_event(&self) -> Option<Event> {
         self.events.try_recv().ok()

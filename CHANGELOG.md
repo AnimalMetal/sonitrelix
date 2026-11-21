@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.4
+
+- Added a microphone test, F8 peak readings and clipping feedback, and optional headphone monitoring. Imports can recover complete frames from interrupted Sonitrelix recordings.
+- Added Automatic language selection. New installations use Spanish when Windows displays in Spanish and English otherwise.
+
 ## 0.6.3
 
 - Fixed Install update, Cancel transfer, and Skip this version in the update window. The window now reports download progress, skip confirmation, and errors.

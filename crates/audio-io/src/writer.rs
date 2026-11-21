@@ -1,5 +1,93 @@
 use super::*;
 use std::{fs::OpenOptions, io::Write};
+
+/// Recover a copy of Sonitrelix's own fixed-header PCM16 recording after an interrupted write.
+/// The caller identifies the recording. A complete file can be imported directly.
+pub fn recover_pcm16_recording(
+    path: &Path,
+    destination: &Path,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> io::Result<Option<WavInfo>> {
+    use std::sync::atomic::Ordering;
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Do not recover a file another Sonitrelix instance is still writing.
+        options.share_mode(1);
+    }
+    let mut source = options.open(path)?;
+    let length = source.metadata()?.len();
+    let mut header = [0u8; 44];
+    if length < header.len() as u64 {
+        return Ok(None);
+    }
+    source.read_exact(&mut header)?;
+    let short = |i| u16::from_le_bytes([header[i], header[i + 1]]);
+    let word = |i| u32::from_le_bytes([header[i], header[i + 1], header[i + 2], header[i + 3]]);
+    let (channels, rate) = (short(22), word(24));
+    if &header[..4] != b"RIFF"
+        || &header[8..16] != b"WAVEfmt "
+        || word(16) != 16
+        || short(20) != 1
+        || ![1, 2].contains(&channels)
+        || !(8000..=192000).contains(&rate)
+        || short(34) != 16
+        || &header[36..40] != b"data"
+        || short(32) != channels * 2
+        || word(28) != rate * u32::from(channels) * 2
+    {
+        return Ok(None);
+    }
+    let bytes = length - 44;
+    if u64::from(word(40)) == bytes && u64::from(word(4)) == length - 8 {
+        return Ok(None);
+    }
+    let align = u64::from(channels) * 2;
+    let bytes = bytes - bytes % align;
+    if bytes == 0 || bytes > u64::from(u32::MAX) - 36 {
+        return Err(invalid(
+            "No recoverable PCM frames or RIFF recording too large",
+        ));
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Err(io::ErrorKind::Interrupted.into());
+    }
+    header[4..8].copy_from_slice(&(bytes as u32 + 36).to_le_bytes());
+    header[40..44].copy_from_slice(&(bytes as u32).to_le_bytes());
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)?;
+    let copied = (|| {
+        output.write_all(&header)?;
+        let mut buffer = [0u8; 65536];
+        let mut remaining = bytes;
+        while remaining != 0 {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            let chunk = remaining.min(buffer.len() as u64) as usize;
+            source.read_exact(&mut buffer[..chunk])?;
+            output.write_all(&buffer[..chunk])?;
+            remaining -= chunk as u64;
+        }
+        output.sync_all()
+    })();
+    drop(output);
+    if let Err(error) = copied {
+        let _ = std::fs::remove_file(destination);
+        return Err(error);
+    }
+    Ok(Some(WavInfo {
+        sample_rate: rate,
+        channels,
+        bits: 16,
+        frames: bytes / align,
+        encoding: Encoding::Pcm,
+    }))
+}
 /// Create-new PCM16 or float32 writer. Only this newly owned file is patched.
 pub struct WavWriter {
     file: File,
@@ -136,6 +224,37 @@ impl WavWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recording_recovery_copies_complete_frames_after_the_last_checkpoint() {
+        let directory = std::env::temp_dir();
+        let original = directory.join(format!("sonitrelix-interrupted-{}.wav", std::process::id()));
+        let recovered = directory.join(format!("sonitrelix-recovered-{}.wav", std::process::id()));
+        let mut writer = WavWriter::create(&original, 48000, 2).unwrap();
+        writer.write_frames(&[0.1, 0.2]).unwrap();
+        writer.checkpoint().unwrap();
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        writer.write_frames(&[0.3, 0.4]).unwrap();
+        writer.file.write_all(&[0x12]).unwrap(); // A trailing partial frame is unusable.
+        drop(writer);
+        let untouched = std::fs::read(&original).unwrap();
+        let info = recover_pcm16_recording(&original, &recovered, &cancel)
+            .unwrap()
+            .unwrap();
+        assert_eq!(info.frames, 2);
+        assert_eq!(WavReader::open(&recovered).unwrap().info, info);
+        assert_eq!(
+            &std::fs::read(&recovered).unwrap()[44..],
+            &untouched[44..52]
+        );
+        assert_eq!(std::fs::read(&original).unwrap(), untouched);
+        assert!(
+            recover_pcm16_recording(&recovered, &original, &cancel)
+                .unwrap()
+                .is_none()
+        );
+        std::fs::remove_file(original).unwrap();
+        std::fs::remove_file(recovered).unwrap();
+    }
     #[test]
     fn writer_roundtrip_and_no_overwrite() {
         let path =

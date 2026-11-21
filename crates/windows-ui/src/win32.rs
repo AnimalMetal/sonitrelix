@@ -202,6 +202,7 @@ unsafe extern "system" {
 #[link(name = "kernel32")]
 unsafe extern "system" {
     pub fn GetModuleHandleW(n: *const u16) -> HWND;
+    pub fn GetUserDefaultUILanguage() -> u16;
 }
 #[link(name = "comdlg32")]
 unsafe extern "system" {

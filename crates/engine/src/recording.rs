@@ -1,5 +1,10 @@
 //! Standalone WASAPI capture: bounded capture queue -> separate PCM16 disk writer.
-use super::{ring, wasapi::Signal};
+use super::{
+    Level,
+    meter::PeakMeter,
+    ring,
+    wasapi::{self, Signal},
+};
 use sonitrelix_audio_io::{WavInfo, WavWriter};
 use std::{
     io,
@@ -32,12 +37,81 @@ pub struct RecordRequest {
     pub sample_rate: u32,
     pub channels: u16,
     pub buffer_frames: u32,
+    /// A selected output device, or an empty ID for the Windows default. None disables monitoring.
+    pub monitoring_output: Option<String>,
 }
 
 pub struct Recorded {
     pub path: PathBuf,
     pub info: WavInfo,
     pub warning: Option<String>,
+}
+
+/// Watch the selected capture endpoint briefly without creating a recording or opening output.
+pub struct MicrophoneCheck {
+    stop: Arc<AtomicBool>,
+    wake: Arc<Signal>,
+    meter: Arc<PeakMeter>,
+    result: Receiver<Result<(), String>>,
+}
+
+impl MicrophoneCheck {
+    pub fn start(input_id: String, rate: u32, channels: u16, buffer: u32) -> io::Result<Self> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Signal::new()?);
+        let meter = Arc::new(PeakMeter::default());
+        let (send, result) = mpsc::channel();
+        let (worker_stop, worker_wake, worker_meter) = (stop.clone(), wake.clone(), meter.clone());
+        thread::Builder::new()
+            .name("wasapi-microphone-check".into())
+            .spawn(move || {
+                let controls = CaptureState {
+                    stop: &worker_stop,
+                    wake: &worker_wake,
+                    meter: &worker_meter,
+                    paused: &AtomicBool::new(false),
+                    frames: &AtomicU64::new(0),
+                    deadline: Some(Instant::now() + Duration::from_secs(30)),
+                };
+                let result = unsafe {
+                    capture(
+                        (&input_id, rate, channels, buffer),
+                        controls,
+                        None,
+                        None,
+                        None,
+                    )
+                };
+                let _ = send.send(result);
+            })?;
+        Ok(Self {
+            stop,
+            wake,
+            meter,
+            result,
+        })
+    }
+
+    pub fn level(&self) -> Level {
+        self.meter.read()
+    }
+
+    pub fn try_result(&self) -> Option<Result<(), String>> {
+        match self.result.try_recv() {
+            Ok(result) => Some(result),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Some(Err("Microphone check worker stopped".into()))
+            }
+            Err(mpsc::TryRecvError::Empty) => None,
+        }
+    }
+}
+
+impl Drop for MicrophoneCheck {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        self.wake.set();
+    }
 }
 pub struct Recorder {
     stop: Arc<AtomicBool>,
@@ -46,6 +120,8 @@ pub struct Recorder {
     done: Arc<AtomicBool>,
     wake: Arc<Signal>,
     result: Receiver<Result<Recorded, String>>,
+    meter: Arc<PeakMeter>,
+    monitor_errors: Receiver<String>,
 }
 impl Recorder {
     pub fn start(request: RecordRequest) -> io::Result<Self> {
@@ -54,6 +130,8 @@ impl Recorder {
         let paused = Arc::new(AtomicBool::new(false));
         let frames = Arc::new(AtomicU64::new(0));
         let done = Arc::new(AtomicBool::new(false));
+        let meter = Arc::new(PeakMeter::default());
+        let (monitor_tx, monitor_errors) = mpsc::channel();
         let (tx, result) = mpsc::channel();
         let (s, p, f, d, w) = (
             stop.clone(),
@@ -62,11 +140,12 @@ impl Recorder {
             done.clone(),
             wake.clone(),
         );
+        let input_meter = meter.clone();
         thread::Builder::new()
             .name("recording-coordinator".into())
             .spawn(move || {
                 let _finished = Finished(d);
-                let result = record(request, s, p, f, w);
+                let result = record(request, s, p, f, w, input_meter, monitor_tx);
                 let _ = tx.send(result);
             })?;
         Ok(Self {
@@ -76,6 +155,8 @@ impl Recorder {
             done,
             wake,
             result,
+            meter,
+            monitor_errors,
         })
     }
     pub fn stop(&self) {
@@ -84,6 +165,15 @@ impl Recorder {
     }
     pub fn frames(&self) -> u64 {
         self.frames.load(Ordering::Acquire)
+    }
+    pub fn input_level(&self) -> Level {
+        self.meter.read()
+    }
+    pub fn input_clipped(&self) -> bool {
+        self.meter.clipped()
+    }
+    pub fn try_monitor_error(&self) -> Option<String> {
+        self.monitor_errors.try_recv().ok()
     }
     pub fn pause(&self, pause: bool) {
         self.paused.store(pause, Ordering::Release);
@@ -119,6 +209,8 @@ fn record(
     paused: Arc<AtomicBool>,
     frames: Arc<AtomicU64>,
     wake: Arc<Signal>,
+    meter: Arc<PeakMeter>,
+    monitor_errors: mpsc::Sender<String>,
 ) -> Result<Recorded, String> {
     let mut writer = WavWriter::create(&r.path, r.sample_rate, r.channels)
         .map_err(|e| format!("Create recording: {e}"))?;
@@ -133,6 +225,16 @@ fn record(
     let channels = r.channels;
     let buffer = r.buffer_frames;
     let gate = r.gate.clone();
+    let monitor = r.monitoring_output.map(|output| {
+        let frames = (rate / 10).clamp(1024, 32768) as usize;
+        let (input, render) = ring::ring((frames * usize::from(channels)).next_power_of_two());
+        (input, (output, render))
+    });
+    let (mut monitor_input, monitor_output) = match monitor {
+        Some((input, output)) => (Some(input), Some(output)),
+        None => (None, None),
+    };
+    let capture_paused = paused.clone();
     let capture = thread::Builder::new()
         .name("wasapi-capture".into())
         .spawn(move || {
@@ -140,16 +242,41 @@ fn record(
             unsafe {
                 capture(
                     (&input, rate, channels, buffer),
-                    &s,
-                    &paused,
-                    &f,
-                    &w,
-                    &mut producer,
+                    CaptureState {
+                        stop: &s,
+                        paused: &capture_paused,
+                        frames: &f,
+                        wake: &w,
+                        meter: &meter,
+                        deadline: None,
+                    },
+                    Some(&mut producer),
+                    monitor_input.as_mut(),
                     gate.as_deref(),
                 )
             }
         })
         .map_err(|e| e.to_string())?;
+    let monitor = monitor_output.and_then(|(output, pcm)| {
+        let stop = stop.clone();
+        let errors = monitor_errors.clone();
+        match thread::Builder::new()
+            .name("wasapi-microphone-monitor".into())
+            .spawn(move || {
+                if let Err(error) =
+                    wasapi::monitor((&output, rate, channels, buffer), (&stop, &paused), pcm)
+                    && !stop.load(Ordering::Acquire)
+                {
+                    let _ = errors.send(error);
+                }
+            }) {
+            Ok(worker) => Some(worker),
+            Err(error) => {
+                let _ = monitor_errors.send(error.to_string());
+                None
+            }
+        }
+    });
     let mut block = vec![0f32; 8192 * usize::from(r.channels)];
     let mut warning = None;
     let mut checkpoint = Instant::now();
@@ -180,9 +307,16 @@ fn record(
     stop.store(true, Ordering::Release);
     wake.set();
     match capture.join() {
-        Ok(Err(e)) => warning = Some(e),
-        Err(_) => warning = Some("Capture worker panicked".into()),
+        Ok(Err(e)) => {
+            warning.get_or_insert(e);
+        }
+        Err(_) => {
+            warning.get_or_insert_with(|| "Capture worker panicked".into());
+        }
         _ => (),
+    }
+    if let Some(monitor) = monitor {
+        let _ = monitor.join();
     }
     let count = writer.frames();
     let info = writer.finish().map_err(|e| {
@@ -216,13 +350,27 @@ impl Drop for Client {
         }
     }
 }
+struct CaptureState<'a> {
+    stop: &'a AtomicBool,
+    paused: &'a AtomicBool,
+    frames: &'a AtomicU64,
+    wake: &'a Signal,
+    meter: &'a PeakMeter,
+    deadline: Option<Instant>,
+}
+
 unsafe fn capture(
     spec: (&str, u32, u16, u32),
-    stop: &AtomicBool,
-    paused: &AtomicBool,
-    frames: &AtomicU64,
-    wake: &Signal,
-    producer: &mut ring::Producer,
+    CaptureState {
+        stop,
+        paused,
+        frames,
+        wake,
+        meter,
+        deadline,
+    }: CaptureState<'_>,
+    mut producer: Option<&mut ring::Producer>,
+    mut monitor: Option<&mut ring::Producer>,
     gate: Option<&super::StartGate>,
 ) -> Result<(), String> {
     unsafe {
@@ -286,7 +434,7 @@ unsafe fn capture(
         let mut first = true;
         let mut running = true;
         let mut start_phase = 1u32;
-        while !stop.load(Ordering::Acquire) {
+        while !stop.load(Ordering::Acquire) && deadline.is_none_or(|end| Instant::now() < end) {
             if paused.load(Ordering::Acquire) {
                 if running {
                     client.0.Stop().map_err(err)?;
@@ -324,13 +472,22 @@ unsafe fn capture(
                     return Err("Input discontinuity; completed audio was retained".into());
                 }
                 let samples = count as usize * usize::from(channels);
-                let written = if flags & 2 != 0 {
-                    producer.push(&zeros[..samples])
+                let input = if flags & 2 != 0 {
+                    &zeros[..samples]
                 } else if data.is_null() {
-                    0
+                    &[]
                 } else {
-                    producer.push(std::slice::from_raw_parts(data.cast::<f32>(), samples))
+                    std::slice::from_raw_parts(data.cast::<f32>(), samples)
                 };
+                let written = if let Some(producer) = producer.as_deref_mut() {
+                    producer.push(input)
+                } else {
+                    input.len()
+                };
+                meter.observe(&input[..written]);
+                if let Some(monitor) = monitor.as_deref_mut() {
+                    let _ = monitor.push(&input[..written]);
+                }
                 capture.ReleaseBuffer(count).map_err(err)?;
                 frames.fetch_add((written / usize::from(channels)) as u64, Ordering::Release);
                 first = false;
@@ -346,6 +503,40 @@ unsafe fn capture(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "Uses the default WASAPI output with a silent monitor queue"]
+    fn monitor_can_start_and_stop_on_the_default_output() {
+        let (mut input, output) = ring::ring(4096);
+        assert_eq!(input.push(&[0.; 2048]), 2048);
+        let stop = AtomicBool::new(false);
+        let pause = AtomicBool::new(false);
+        thread::scope(|scope| {
+            let worker =
+                scope.spawn(|| wasapi::monitor(("", 48000, 1, 256), (&stop, &pause), output));
+            thread::sleep(Duration::from_millis(150));
+            pause.store(true, Ordering::Release);
+            thread::sleep(Duration::from_millis(65));
+            assert_eq!(input.push(&[0.; 128]), 128);
+            pause.store(false, Ordering::Release);
+            thread::sleep(Duration::from_millis(100));
+            stop.store(true, Ordering::Release);
+            worker.join().unwrap().unwrap();
+        });
+    }
+
+    #[test]
+    #[ignore = "Checks a deliberately invalid Windows output ID without opening the default"]
+    fn monitoring_an_unavailable_device_reports_failure() {
+        let (_, output) = ring::ring(1024);
+        assert!(
+            wasapi::monitor(
+                ("nonexistent-sonitrelix-monitor-output", 48000, 1, 256),
+                (&AtomicBool::new(false), &AtomicBool::new(false)),
+                output,
+            )
+            .is_err()
+        );
+    }
     #[test]
     #[ignore = "Briefly opens the actual default microphone; deletes the test recording"]
     fn default_microphone_captures_and_resumes_with_backing() {
@@ -383,6 +574,7 @@ mod tests {
             sample_rate: 48000,
             channels: 1,
             buffer_frames: 512,
+            monitoring_output: None,
         })
         .unwrap();
         let exercise = || -> Result<WavInfo, String> {
@@ -458,6 +650,7 @@ mod tests {
             sample_rate: 48000,
             channels: 1,
             buffer_frames: 256,
+            monitoring_output: None,
         })
         .unwrap();
         let end = Instant::now() + Duration::from_secs(5);

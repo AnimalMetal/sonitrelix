@@ -1,7 +1,9 @@
 //! Native tabbed Windows Preferences. Workers own discovery and disk writes.
-use super::{load_strings, w::*};
+use super::{load_strings, use_spanish, w::*};
 use sonitrelix_devices::{Catalog, Device};
-use sonitrelix_settings::{BITRATES, BUFFER_SIZES, EXPORT_RATES, SAMPLE_RATES, Settings, Store};
+use sonitrelix_settings::{
+    BITRATES, BUFFER_SIZES, EXPORT_RATES, SAMPLE_RATES, Settings, Store, UI_LANGUAGES,
+};
 use std::{
     ptr::{null, null_mut},
     sync::mpsc::{self, Receiver, TryRecvError},
@@ -177,7 +179,6 @@ impl Context {
                     self.field(h, "pref_buffer", 3002, 52, true);
                     self.field(h, "pref_offset", 3003, 94, false);
                     self.check(h, "pref_monitoring", 3004, 133);
-                    EnableWindow(GetDlgItem(h, 3004), 0);
                     self.note(h, "pref_recording_help", 158, 29);
                 }
                 3 => {
@@ -239,8 +240,15 @@ impl Context {
                     fill(
                         h,
                         1001,
-                        &["English".into(), "Español".into()],
-                        usize::from(self.draft.general.language == "es"),
+                        &[
+                            self.t("pref_language_auto"),
+                            "English".into(),
+                            "Español".into(),
+                        ],
+                        UI_LANGUAGES
+                            .iter()
+                            .position(|&lang| lang == self.draft.general.language)
+                            .unwrap_or(0),
                     );
                     fill(
                         h,
@@ -451,12 +459,10 @@ impl Context {
             let mut next = self.draft.clone();
             next.general.automatic_updates =
                 SendMessageW(GetDlgItem(self.pages[0], 1003), 0xf0, 0, 0) == 1;
-            next.general.language = if selected(self.pages[0], 1001) == 1 {
-                "es"
-            } else {
-                "en"
-            }
-            .into();
+            next.general.language = UI_LANGUAGES
+                .get(selected(self.pages[0], 1001))
+                .unwrap_or(&"auto")
+                .to_string();
             next.general.new_project_sample_rate = *SAMPLE_RATES
                 .get(selected(self.pages[0], 1002))
                 .ok_or((0, 1002, "pref_sample_rate_error"))?;
@@ -635,7 +641,7 @@ impl Context {
     }
     unsafe fn localize(&mut self) {
         unsafe {
-            self.strings = load_strings(self.draft.general.language == "es");
+            self.strings = load_strings(use_spanish(&self.draft.general.language));
             for (h, key) in &self.labels {
                 SetWindowTextW(*h, wide(&self.t(key)).as_ptr());
             }
@@ -777,7 +783,7 @@ impl Dialog {
                 owner,
                 sheet: null_mut(),
                 draft: store.settings.clone(),
-                strings: load_strings(store.settings.general.language == "es"),
+                strings: load_strings(use_spanish(&store.settings.general.language)),
                 store,
                 pages: [null_mut(); 6],
                 labels: vec![],
@@ -1014,6 +1020,12 @@ mod tests {
                 }
             }
             let general = dialog.context.pages[0];
+            assert_eq!(
+                selected(general, 1001),
+                0,
+                "Automatic is selected by default"
+            );
+            assert_eq!(SendMessageW(GetDlgItem(general, 1001), 0x146, 0, 0), 3);
             let recording = dialog.context.pages[2];
             let editing = dialog.context.pages[3];
             for (index, id, key, role) in [
@@ -1080,7 +1092,7 @@ mod tests {
             );
             set(editing, 4002, "2500");
             set(recording, 3003, "-25");
-            SendMessageW(GetDlgItem(general, 1001), 0x14e, 1, 0);
+            SendMessageW(GetDlgItem(general, 1001), 0x14e, 2, 0);
             SendMessageW(GetDlgItem(general, 1002), 0x14e, 4, 0);
             SendMessageW(dialog.hwnd, 0x400 + 113, 4, 0); // Native Apply button path.
             let deadline = Instant::now() + Duration::from_secs(5);

@@ -31,7 +31,7 @@ fn chord(s: &str) -> Option<Chord> {
                     }
                     _ if p.starts_with('F') => {
                         let n = p[1..].parse::<usize>().ok()?;
-                        if !(2..=24).contains(&n) || [6, 7].contains(&n) {
+                        if !(2..=24).contains(&n) || [6, 7, 8].contains(&n) {
                             return None;
                         }
                         0x6f + n

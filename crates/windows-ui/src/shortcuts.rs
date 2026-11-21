@@ -91,6 +91,7 @@ pub(super) fn route(
             0x70 => return Some(Command(HELP)),
             0x75 => return Some(Command(REPORT)),
             0x76 => return Some(Command(READ_SELECTION)),
+            0x77 => return Some(Command(REPORT_LEVELS)),
             _ => (),
         }
     }
@@ -155,6 +156,16 @@ pub(super) fn route(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn f8_audio_levels_work_from_every_main_window_control() {
+        assert!(include_str!("../../../docs/SHORTCUTS.md").contains("| F8 |"));
+        for scope in [Scope::Tracks, Scope::Surface, Scope::Text, Scope::Other] {
+            assert_eq!(
+                route(0x77, false, false, false, scope),
+                Some(Action::Command(REPORT_LEVELS))
+            );
+        }
+    }
     #[test]
     fn alt_arrows_adjust_only_the_focused_track_list() {
         for (label, key, command) in [

@@ -1,4 +1,4 @@
-# Keyboard shortcuts / Atajos — 0.6.2
+# Keyboard shortcuts / Atajos — 0.6.4
 
 Audio and track commands act on the selected track when **Tracks or Clips has focus**. In text fields, ordinary typing and Ctrl+A/C/X/V/Z keep Windows text-editing behavior. Ctrl+A never selects all tracks. The clipboard stores Sonitrelix clips internally; it is not the Windows audio clipboard.
 
@@ -11,6 +11,7 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | F1 | User guide | Guía |
 | Ctrl+E | Effects on selection or whole track, from Tracks/Clips | Efectos en selección o pista, desde Pistas/Fragmentos |
 | F6 / F7 | Focus transport snapshot / selection | Enfocar transporte / selección |
+| F8 | Report microphone and playback peaks and clipping | Anunciar picos de entrada y reproducción y saturación |
 | Ctrl+Z / Ctrl+Y | Undo / redo outside text fields | Deshacer / rehacer fuera de texto |
 | Ctrl+Shift+N | New empty track | Nueva pista vacía |
 | Up / Down | Select track or clip in focused list | Elegir pista o fragmento |
@@ -50,7 +51,7 @@ Preferences: Ctrl+Tab / Ctrl+Shift+Tab changes category, Tab traverses controls,
 
 Preferencias: Ctrl+Tab / Ctrl+Mayús+Tab cambia categoría; Tab recorre controles y Escape cancela. F1 / Ctrl+H abre ayuda de categoría. Guía: Ctrl+F busca, F3 siguiente, Intro busca o lee sección y Escape cierra.
 
-Preferences > Editing/keyboard customizes 22 editing/track actions; Apply saves. Global project/time/help shortcuts stay fixed. Conflicts/reserved keys are rejected. Ctrl+G adjusts gain/pan; Ctrl+Shift+E exports the mix. Recording plays backing tracks; live input monitoring remains unavailable.
+Preferences > Editing/keyboard customizes 22 editing/track actions; Apply saves. Global project/time/help shortcuts stay fixed. Conflicts/reserved keys are rejected. Ctrl+G adjusts gain/pan; Ctrl+Shift+E exports the mix. Recording plays backing tracks and can monitor the microphone with headphones when enabled in Preferences. Transport > Test microphone measures the input without saving audio; Escape ends the test.
 
 In Effects and Volume and pan, Tab moves from each slider to its Reset button. Space activates Reset. Use the arrow keys or Page Up and Page Down on the slider. Confirm with Apply or OK.
 

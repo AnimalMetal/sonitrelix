@@ -10,6 +10,7 @@ pub(super) const STOP: usize = 703;
 pub(super) const START: usize = 704;
 pub(super) const END: usize = 705;
 pub(super) const REPORT: usize = 706;
+pub(super) const REPORT_LEVELS: usize = 707;
 pub(super) const TIMER: usize = 77;
 type ImportResult = Result<(Media, String, PathBuf), String>;
 pub(super) struct Playback {
@@ -43,6 +44,14 @@ impl Default for Playback {
     }
 }
 impl App {
+    pub(super) fn playback_level(&self) -> Option<sonitrelix_engine::Level> {
+        self.playback.engine.as_ref().and_then(|engine| {
+            let now = engine.snapshot();
+            (now.id == self.playback.id
+                && matches!(now.state, State::Playing | State::Buffering | State::Paused))
+            .then(|| engine.output_level())
+        })
+    }
     pub(super) unsafe fn selected_track(&self) -> Option<usize> {
         unsafe {
             let selected = SendMessageW(GetDlgItem(self.hwnd, 11), 0x188, 0, 0);
@@ -63,6 +72,7 @@ impl App {
             self.playback.import_cancel = Default::default();
             let cancel = self.playback.import_cancel.clone();
             let directory = self.data.join("imports");
+            let recordings = self.data.join("recordings");
 
             match std::thread::Builder::new()
                 .name("wav-import".into())
@@ -74,7 +84,24 @@ impl App {
                             .file_stem()
                             .map(|s| s.to_string_lossy().into_owned())
                             .unwrap_or_else(|| "Audio".into());
-                        let native_wav = if path
+                        let is_recording = name.strip_prefix("recording-")
+                            .and_then(|s| s.split_once('-'))
+                            .is_some_and(|(stamp, pid)| stamp.parse::<u128>().is_ok() && pid.parse::<u32>().is_ok())
+                            && path.extension().is_some_and(|s| s.eq_ignore_ascii_case("wav"))
+                            && fs::canonicalize(&recordings).ok().as_deref() == path.parent();
+                        let stamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos();
+                        let destination = directory.join(format!("import-{stamp}-{}.wav", std::process::id()));
+                        let recovered = if is_recording {
+                            fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+                            sonitrelix_audio_io::recover_pcm16_recording(&path, &destination, &cancel)
+                                .map_err(|e| e.to_string())?
+                        } else {
+                            None
+                        };
+                        let native_wav = if recovered.is_none() && path
                             .extension()
                             .is_some_and(|s| s.eq_ignore_ascii_case("wav"))
                         {
@@ -82,16 +109,12 @@ impl App {
                         } else {
                             None
                         };
-                        let (path, info) = if let Some(info) = native_wav {
+                        let (path, info) = if let Some(info) = recovered {
+                            (destination, info)
+                        } else if let Some(info) = native_wav {
                             (path, info)
                         } else {
                             fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-                            let stamp = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_nanos();
-                            let destination = directory
-                                .join(format!("import-{stamp}-{}.wav", std::process::id()));
                             let result = sonitrelix_audio_io::codecs::decode(&path, &destination, &cancel)
                                 .or_else(|native_error| {
                                     if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -329,6 +352,7 @@ impl App {
                 return;
             }
             self.playback.closing = true;
+            self.microphone_check = None;
             self.maintenance.clear();
             self.poll_maintenance();
             self.exporter.cancel();
@@ -513,6 +537,7 @@ impl App {
         unsafe {
             self.poll_export();
             self.poll_maintenance();
+            self.poll_microphone_check();
             if self.recording.is_some() {
                 self.poll_recording();
                 if self.recording.is_some() {

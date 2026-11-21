@@ -34,7 +34,7 @@ mod updates;
 #[path = "win32.rs"]
 mod w;
 use editing_ui::*;
-use playback::{END, IMPORT, PAUSE, PLAY, REPORT, START, STOP};
+use playback::{END, IMPORT, PAUSE, PLAY, REPORT, REPORT_LEVELS, START, STOP};
 use sonitrelix_session::{Project, parse_time};
 use sonitrelix_settings::Store;
 use std::{
@@ -91,6 +91,7 @@ struct App {
     playback: playback::Playback,
     modal: std::cell::Cell<bool>,
     recording: Option<recording_ui::Recording>,
+    microphone_check: Option<sonitrelix_engine::recording::MicrophoneCheck>,
     recording_close_pending: bool,
     help: Option<help::Viewer>,
     updates: updates::Checker,
@@ -278,6 +279,8 @@ impl App {
                         ("go_start", START),
                         ("go_end", END),
                         ("report_position", REPORT),
+                        ("report_levels", REPORT_LEVELS),
+                        ("microphone_check", recording_ui::CHECK_MICROPHONE),
                         ("record", recording_ui::RECORD),
                     ],
                 ),
@@ -632,6 +635,7 @@ impl App {
                     STOP,
                     PAUSE,
                     REPORT,
+                    REPORT_LEVELS,
                     PREFERENCES,
                     HELP,
                     ABOUT,
@@ -660,10 +664,12 @@ impl App {
                 updates::CHECK => self.check_updates(),
                 effects_ui::EFFECTS => self.effects_dialog(),
                 recording_ui::RECORD => self.record_command(),
+                recording_ui::CHECK_MICROPHONE => self.toggle_microphone_check(),
                 COPY | CUT | PASTE | DELETE_AUDIO | SELECT_ALL | SPLIT | TRIM | SILENCE
                 | INSERT_SILENCE | ADD_EMPTY | DUPLICATE | MOVE_UP | MOVE_DOWN | RENAME_FOCUS
                 | MARK_START | MARK_END | CLEAR_SELECTION | READ_SELECTION => self.edit_command(id),
                 IMPORT | PLAY | PAUSE | STOP | START | END | REPORT => self.audio_command(id),
+                REPORT_LEVELS => self.report_levels(),
                 NEW => {
                     if self.can_close() {
                         self.maintenance.clear();
@@ -866,9 +872,13 @@ impl App {
             let values = [self.text(13), self.text(15), self.text(17), self.text(19)];
             let selected = SendMessageW(GetDlgItem(self.hwnd, 11), 0x188, 0, 0);
             let focus = GetDlgCtrlID(GetFocus());
-            let language_changed = self.es != (store.settings.general.language == "es");
-            self.es = store.settings.general.language == "es";
+            let es = use_spanish(&store.settings.general.language);
+            let language_changed = self.es != es;
+            self.es = es;
             self.verbose = store.settings.accessibility.detailed_time;
+            if self.store.settings.devices.input_id != store.settings.devices.input_id {
+                self.microphone_check = None;
+            }
             self.store = store;
             if language_changed {
                 let skipped_here = self.strings["update_skipped_here"].clone();
@@ -958,6 +968,15 @@ fn format_time(ms: u64) -> String {
         ms % 1000
     )
 }
+fn spanish_for(language: &str, windows_ui_language: u16) -> bool {
+    // PRIMARYLANGID ignores regional variants such as es-ES and es-MX.
+    language == "es" || (language == "auto" && windows_ui_language & 0x03ff == 0x0a)
+}
+
+fn use_spanish(language: &str) -> bool {
+    spanish_for(language, unsafe { GetUserDefaultUILanguage() })
+}
+
 fn load_strings(es: bool) -> serde_json::Value {
     serde_json::from_str(if es {
         include_str!("../../../resources/es.json")
@@ -1127,7 +1146,7 @@ pub fn run() {
         for warning in &store.warnings {
             diagnostics::write(&data, "preferences startup", warning);
         }
-        let es = store.settings.general.language == "es";
+        let es = use_spanish(&store.settings.general.language);
         let verbose = store.settings.accessibility.detailed_time;
         let mut app = Box::new(App {
             hwnd: null_mut(),
@@ -1155,6 +1174,7 @@ pub fn run() {
             playback: Default::default(),
             modal: std::cell::Cell::new(false),
             recording: None,
+            microphone_check: None,
             recording_close_pending: false,
             help: None,
             updates: Default::default(),
@@ -1299,6 +1319,10 @@ pub fn run() {
                     app.status(&app.t("audio_import_cancelled"));
                     continue;
                 }
+                if msg.wParam == 0x1b && !ctrl && !shift && !alt && app.microphone_check.is_some() {
+                    app.toggle_microphone_check();
+                    continue;
+                }
                 if focus == GetDlgItem(app.hwnd, 25)
                     && msg.wParam == 0x0d
                     && !ctrl
@@ -1392,6 +1416,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn automatic_language_uses_windows_ui_language_with_english_fallback() {
+        assert!(spanish_for("auto", 0x0c0a)); // Spanish (Spain).
+        assert!(spanish_for("auto", 0x080a)); // Spanish (Mexico).
+        assert!(!spanish_for("auto", 0x0409)); // English (US).
+        assert!(!spanish_for("auto", 0x0416)); // Portuguese (Brazil).
+        assert!(!spanish_for("en", 0x080a));
+        assert!(spanish_for("es", 0x0409));
+    }
     unsafe fn exercise_update_buttons(app: &mut App) {
         #[link(name = "user32")]
         unsafe extern "system" {
@@ -1544,6 +1577,7 @@ mod tests {
                 playback: Default::default(),
                 modal: std::cell::Cell::new(false),
                 recording: None,
+                microphone_check: None,
                 recording_close_pending: false,
                 help: None,
                 updates: Default::default(),

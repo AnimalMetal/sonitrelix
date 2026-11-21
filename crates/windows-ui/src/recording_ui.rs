@@ -1,7 +1,8 @@
 use super::*;
-use sonitrelix_engine::recording::{RecordRequest, Recorded, Recorder};
+use sonitrelix_engine::recording::{MicrophoneCheck, RecordRequest, Recorded, Recorder};
 use sonitrelix_session::{Clip, Media};
 pub(super) const RECORD: usize = 816;
+pub(super) const CHECK_MICROPHONE: usize = 821;
 pub(super) struct Recording {
     recorder: Recorder,
     index: usize,
@@ -9,6 +10,7 @@ pub(super) struct Recording {
     rate: u32,
     paused: bool,
     stopping: bool,
+    clip_announced: bool,
     backing: Option<sonitrelix_engine::Engine>,
 }
 impl App {
@@ -30,6 +32,7 @@ impl App {
                 announcement::announce(GetDlgItem(self.hwnd, 21), &message);
                 return;
             }
+            self.microphone_check = None;
             self.stop_playback();
             self.cancel_audio_import();
             let t = &self.project.tracks[index];
@@ -99,6 +102,12 @@ impl App {
                 sample_rate: rate,
                 channels,
                 buffer_frames: self.store.settings.recording.buffer_frames,
+                monitoring_output: self
+                    .store
+                    .settings
+                    .recording
+                    .monitoring
+                    .then(|| self.store.settings.devices.output_id.clone()),
             };
             match Recorder::start(request) {
                 Ok(recorder) => {
@@ -109,6 +118,7 @@ impl App {
                         rate,
                         paused: false,
                         stopping: false,
+                        clip_announced: false,
                         backing,
                     });
                     self.status(&self.t("record_starting"));
@@ -217,6 +227,93 @@ impl App {
             }
         }
     }
+    pub(super) fn report_levels(&self) {
+        let describe = |key, level: sonitrelix_engine::Level| {
+            let value = if level.peak == 0. {
+                self.t("level_silent")
+            } else {
+                format!("{:.0} dBFS", 20. * level.peak.log10())
+            };
+            let mut message = format!("{}: {value}", self.t(key));
+            if level.clipped {
+                message.push_str(&format!(". {}", self.t("level_clipped")));
+            }
+            message
+        };
+        let mut levels = vec![];
+        if let Some(r) = &self.recording {
+            levels.push(describe("meter_microphone", r.recorder.input_level()));
+            if let Some(backing) = &r.backing
+                && matches!(
+                    backing.snapshot().state,
+                    sonitrelix_engine::State::Playing
+                        | sonitrelix_engine::State::Buffering
+                        | sonitrelix_engine::State::Paused
+                )
+            {
+                levels.push(describe("meter_backing_output", backing.output_level()));
+            }
+        } else {
+            if let Some(check) = &self.microphone_check {
+                levels.push(describe("meter_microphone", check.level()));
+            }
+            if let Some(level) = self.playback_level() {
+                levels.push(describe("meter_output", level));
+            }
+        }
+        let text = if levels.is_empty() {
+            self.t("meter_inactive")
+        } else {
+            levels.join(". ")
+        };
+        self.announce_recording_status(&text);
+    }
+    fn announce_recording_status(&self, text: &str) {
+        unsafe {
+            self.status(text);
+            announcement::announce(GetDlgItem(self.hwnd, 21), text);
+        }
+    }
+    pub(super) fn toggle_microphone_check(&mut self) {
+        let key = if self.microphone_check.take().is_some() {
+            "microphone_check_ended"
+        } else {
+            match MicrophoneCheck::start(
+                self.store.settings.devices.input_id.clone(),
+                self.store.settings.general.new_project_sample_rate,
+                self.store.settings.recording.channels,
+                self.store.settings.recording.buffer_frames,
+            ) {
+                Ok(check) => {
+                    self.microphone_check = Some(check);
+                    "microphone_check_started"
+                }
+                Err(error) => {
+                    self.error_in("microphone check", error);
+                    return;
+                }
+            }
+        };
+        let message = self.t(key);
+        self.announce_recording_status(&message);
+    }
+
+    pub(super) fn poll_microphone_check(&mut self) {
+        if let Some(result) = self
+            .microphone_check
+            .as_ref()
+            .and_then(MicrophoneCheck::try_result)
+        {
+            self.microphone_check = None;
+            match result {
+                Ok(()) => {
+                    let message = self.t("microphone_check_ended");
+                    self.announce_recording_status(&message);
+                }
+                Err(error) => self.error_in("microphone check", error),
+            }
+        }
+    }
     pub(super) unsafe fn insert_recorded(&mut self, index: usize, at: u64, recorded: Recorded) {
         unsafe {
             let media = Media {
@@ -284,6 +381,24 @@ impl App {
     }
     pub(super) unsafe fn poll_recording(&mut self) {
         unsafe {
+            if let Some(r) = &mut self.recording {
+                let clipped = r.recorder.input_clipped() && !r.clip_announced;
+                if clipped {
+                    r.clip_announced = true;
+                }
+                let monitor_error = r.recorder.try_monitor_error();
+                if let Some(detail) = monitor_error {
+                    self.log_error("microphone monitoring", detail);
+                    let message = self.t("record_monitor_failed");
+                    self.status(&message);
+                    announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+                }
+                if clipped {
+                    let message = self.t("record_input_clipping");
+                    self.status(&message);
+                    announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+                }
+            }
             let failure = self
                 .recording
                 .as_ref()

@@ -12,7 +12,7 @@ use std::{
     path::Path,
 };
 pub use timeline::{LiveMix, MixTrack, Segment, Source, Timeline, TimelineReader};
-pub use writer::WavWriter;
+pub use writer::{WavWriter, recover_pcm16_recording};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Encoding {
     Pcm,

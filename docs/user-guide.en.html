@@ -58,7 +58,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <a class="skip" href="#guide">Skip to the user guide</a>
 <main id="guide" tabindex="-1">
 <h1>Sonitrelix user guide</h1>
-<p class="lead">From your first recording to a multitrack mix. For Sonitrelix 0.6.3 on Windows.</p>
+<p class="lead">From your first recording to a multitrack mix. For Sonitrelix 0.6.4 on Windows.</p>
 <p>English · <a href="user-guide.es.html" lang="es" hreflang="es">Leer en español</a></p>
 <p>Use Sonitrelix to record, edit and mix audio while preserving your original files. You can switch between English and Spanish in Preferences.</p>
 <nav aria-label="Guide contents"><h2 id="contents">Contents</h2><ol>
@@ -84,7 +84,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <p>The main window has menus, transport controls, a Tracks list, a Clips list, editable time fields and readouts. Use Up/Down in a list to choose a track or clip. Most audio shortcuts work only while <strong>Tracks or Clips has focus</strong>. In a text field, Ctrl+A/C/X/V edit text instead of audio.</p>
 <h3 id="devices">Choose your microphone and headphones</h3>
 <ol><li>Press <kbd>Ctrl+,</kbd> to open Tools &gt; Preferences.</li><li>Use Ctrl+Tab to reach <strong>Audio devices</strong>.</li><li>Select the input microphone and output device independently. Use the refresh control after connecting a device.</li><li>In <strong>Recording / playback</strong>, choose recording channels and buffering. Match mono/stereo to an existing track you plan to record into.</li><li>Choose Apply to save while keeping Preferences open, or OK to save and close. Cancel discards changes you have not applied.</li></ol>
-<p>Use headphones when recording over music. You can hear the backing track during recording. Live microphone monitoring is unavailable.</p>
+<p>Use headphones when recording over music. You can hear the backing track during recording. To hear your microphone too, enable Monitor microphone while recording under Recording / playback. Monitoring starts off and does not change the recorded level.</p>
 <h3 id="first-playback">Import and hear an audio file</h3>
 <ol><li>Press <kbd>Ctrl+I</kbd>, choose an audio file in the standard file dialog, and open it.</li><li>Wait for import to finish. Compressed audio is converted into a WAV asset in the background.</li><li>Focus Tracks or Clips. Press <kbd>Space</kbd> to play the audible project mix.</li><li>Press <kbd>Ctrl+Space</kbd> to pause/resume, or Space to stop. Press F6 to focus the transport readout.</li></ol>
 <p>Ctrl+I opens WAV, MP3, FLAC and AAC in M4A using the built-in importers. Escape cancels an active import from the main window.</p>
@@ -143,13 +143,16 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 
 <section aria-labelledby="preferences"><h2 id="preferences">5. Set up your preferences</h2>
 <p>Open Tools &gt; Preferences with Ctrl+,. Use Ctrl+Tab or Ctrl+Shift+Tab to change category. Tab visits controls. F1 or Ctrl+H opens category help while Preferences is active.</p>
-<ul><li><strong>General:</strong> language, new-project sample rate and automatic update checks.</li><li><strong>Audio devices:</strong> independent input/output endpoints and refresh.</li><li><strong>Recording / playback:</strong> recording channels, buffering and manual alignment offset. Live monitoring is unavailable.</li><li><strong>Editing / keyboard:</strong> cursor step sizes and Keyboard shortcuts.</li><li><strong>Accessibility:</strong> detailed time reading and available focus/status options.</li><li><strong>Export:</strong> output rate, channels and MP3 bitrate.</li></ul>
+<ul><li><strong>General:</strong> language, new-project sample rate and automatic update checks. Language defaults to Automatic. It uses Spanish when the Windows display language is Spanish and English otherwise. You can choose English or Español explicitly.</li><li><strong>Audio devices:</strong> independent input/output endpoints and refresh.</li><li><strong>Recording / playback:</strong> recording channels, buffering, manual alignment offset and optional headphone monitoring.</li><li><strong>Editing / keyboard:</strong> cursor step sizes and Keyboard shortcuts.</li><li><strong>Accessibility:</strong> detailed time reading and available focus/status options.</li><li><strong>Export:</strong> output rate, channels and MP3 bitrate.</li></ul>
 <h3 id="custom-keys">Customize editing shortcuts</h3>
 <p>In Editing / keyboard, open Keyboard shortcuts, choose an action and enter a chord. The available actions cover editing, tracks, effects and transport. Apply Preferences to save. Conflicting or reserved combinations are rejected. Global project/help keys remain fixed.</p>
 <p>The tables below show defaults. After customization, use the chords shown in your settings. Plain letter keys are intended for Tracks/Clips, not text entry. Language changes labels, not the physical default combinations.</p>
 </section>
 
 <section aria-labelledby="advanced"><h2 id="advanced">6. Advanced: precise timing and project safety</h2>
+<h3 id="recording-levels">Check microphone and playback levels</h3>
+<p>Choose Transport &gt; Test microphone before recording. Speak at the loudest level you expect to use, then press F8 to hear the peak. The test stops after 30 seconds, or press Escape to end it. The test does not save audio or send the microphone to the speakers.</p>
+<p>During playback or recording, F8 reports the peak in dBFS since your last check, or since the stream started for the first check. During an overdub, it reads the microphone and backing output separately. Clipping stays flagged until a new stream or test starts. During a recording you also get one warning the first time the microphone clips. Lower the input gain at the microphone or in Windows.</p>
 <h3 id="alignment">Compensate for recording delay</h3>
 <p>If recorded vocals land late, test a negative Recording alignment offset in milliseconds under Recording / playback. Positive values place capture later; negative values place it earlier, clamped at the project start. The permitted range is −2000 to +2000 milliseconds.</p>
 <ol><li>Record a brief clap or click while listening to a known backing cue through headphones.</li><li>Compare its timing with the cue. Adjust the offset and make a new test take.</li><li>Repeat after changing devices or buffering. Also test pause/resume and a long take.</li></ol>
@@ -158,7 +161,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <p>Back up the .sonitrelix file, all referenced originals and generated data audio folders. Save As changes the project filename, not the location of its assets. Renaming/moving a referenced source can prevent playback. There is no automatic media relinking or self-contained project bundle.</p>
 <p>Clips are consecutive regions with silence gaps. Split and ripple edits are supported; freely dragging/moving overlapping clips is not. Plan edits on a duplicate track when trying a different arrangement.</p>
 <h3 id="recovery">Recover unsaved project changes</h3>
-<p>While a project has unsaved changes, Sonitrelix makes a metadata checkpoint about every 30 seconds. After an abnormal exit, startup may offer recovery from an exited instance. Recover, inspect the result and save a named project. Recovery does not guarantee unfinished recording or power-loss survival.</p>
+<p>While a project has unsaved changes, Sonitrelix makes a metadata checkpoint about every 30 seconds. After an abnormal exit, startup may offer recovery from an exited instance. Recover, inspect the result and save a named project. If Sonitrelix stopped during a take, reopen the original recording from <code>data/recordings</code> with Ctrl+I. For an interrupted Sonitrelix PCM16 recording with a readable header, import can copy whole audio frames left after the last header checkpoint. Inspect the recovered track and align it if needed. This cannot restore unwritten audio.</p>
 <p>File &gt; Recent Projects keeps up to ten paths. A missing recent file produces an error; it does not restore its media.</p>
 <h3 id="updates">Check and install updates</h3>
 <p>Help &gt; Check for updates checks stable GitHub releases. A portable build can install a newer release only when its signed manifest and executable pass verification. Save work and stop recording first. Install update shows download progress in this window. Use Cancel transfer to stop it. Skip this version confirms when the preference is saved and suppresses automatic offers for that version. A manual check can offer it again.</p>
@@ -179,6 +182,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <tr><th scope="row" data-key="F1">F1</th><td>Open the user guide; category help in Preferences.</td></tr>
 <tr><th scope="row" data-key="F6">F6</th><td>Focus the transport snapshot.</td></tr>
 <tr><th scope="row" data-key="F7">F7</th><td>Focus the selection readout.</td></tr>
+<tr><th scope="row" data-key="F8">F8</th><td>Report microphone and playback peak levels and clipping.</td></tr>
 <tr><th scope="row">Tab / Shift+Tab</th><td>Next / previous control.</td></tr>
 <tr><th scope="row">Up / Down</th><td>Choose a track or clip in the focused list.</td></tr>
 <tr><th scope="row">Alt+F4</th><td>Standard Windows close-window command; prompts for unsaved work when appropriate.</td></tr>

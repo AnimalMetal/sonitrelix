@@ -1,6 +1,6 @@
 # Multitrack workflow — 0.6.0
 
-Use headphones and a disposable project. Select input/output independently in Tools > Preferences. Recording channels must match an existing target track. Live microphone monitoring is unavailable.
+Use headphones and a disposable project. Select input/output independently in Tools > Preferences. Recording channels must match an existing target track. Use Transport > Test microphone and F8 to check input before a take. Optional microphone monitoring is off by default and should be used with headphones.
 
 1. Ctrl+I imports instrumental music. Ctrl+Shift+N adds a track; F2 names it Vocals; A arms it. Home moves to its start.
 2. R records while the other audible tracks play. Ctrl+Space pauses/resumes both streams. R or Space stops. Completed capture replaces its interval without moving later audio.

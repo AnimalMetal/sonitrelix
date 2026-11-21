@@ -10,6 +10,7 @@ pub const EXPORT_RATES: &[u32] = &[
 ];
 pub const BITRATES: &[u32] = &[64, 96, 128, 160, 192, 224, 256, 320];
 pub const BUFFER_SIZES: &[u32] = &[128, 256, 512, 1024, 2048];
+pub const UI_LANGUAGES: &[&str] = &["auto", "en", "es"];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
@@ -36,7 +37,7 @@ macro_rules! section {
     };
 }
 section!(General {
-    language: String = "en".into(),
+    language: String = "auto".into(),
     new_project_sample_rate: u32 = 48000,
     automatic_updates: bool = true
 });
@@ -115,7 +116,7 @@ impl Settings {
         {
             return Err("export");
         }
-        if !["en", "es"].contains(&self.general.language.as_str()) {
+        if !UI_LANGUAGES.contains(&self.general.language.as_str()) {
             return Err("language");
         }
         if !SAMPLE_RATES.contains(&self.general.new_project_sample_rate) {
@@ -301,7 +302,7 @@ fn decode(bytes: &[u8]) -> Result<(Settings, Vec<String>), DecodeError> {
         (
             "general",
             "language",
-            ["en", "es"].contains(&value["general"]["language"].as_str().unwrap_or("")),
+            UI_LANGUAGES.contains(&value["general"]["language"].as_str().unwrap_or("")),
         ),
         (
             "general",
@@ -421,9 +422,20 @@ mod tests {
         assert_eq!(decode(&serde_json::to_vec(&s).unwrap()).ok().unwrap().0, s);
     }
     #[test]
+    fn automatic_is_the_default_and_saved_language_choices_survive() {
+        let (settings, _) = decode(b"{}").ok().unwrap();
+        assert_eq!(settings.general.language, "auto");
+        for language in UI_LANGUAGES {
+            let raw = serde_json::to_vec(&json!({"general": {"language": language}})).unwrap();
+            let (settings, _) = decode(&raw).ok().unwrap();
+            assert_eq!(&settings.general.language, language);
+            assert!(settings.validate().is_ok());
+        }
+    }
+    #[test]
     fn invalid_types_ranges_and_cross_fields_are_repaired() {
         let (s,w)=decode(br#"{"general":{"language":true},"recording":{"offset_ms":9999,"channels":-2},"editing":{"step_ms":3000,"large_step_ms":2},"accessibility":{"detailed_time":1}}"#).ok().unwrap();
-        assert_eq!(s.general.language, "en");
+        assert_eq!(s.general.language, "auto");
         assert_eq!(s.recording.offset_ms, 0);
         assert_eq!(s.recording.channels, 1);
         assert!(s.accessibility.detailed_time);

@@ -86,19 +86,25 @@ struct Stream {
     capacity: u32,
 }
 impl Stream {
-    unsafe fn open(request: &PlayRequest, wake: &Signal) -> Result<Self> {
+    unsafe fn open(
+        output_id: &str,
+        channels: u16,
+        rate: u32,
+        buffer: u32,
+        wake: &Signal,
+    ) -> Result<Self> {
         unsafe {
             let enumerator: IMMDeviceEnumerator = api(
                 CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL),
                 "Create output enumerator",
             )?;
-            let device = if request.output_id.is_empty() {
+            let device = if output_id.is_empty() {
                 api(
                     enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia),
                     "Find default output",
                 )?
             } else {
-                let id: Vec<_> = request.output_id.encode_utf16().chain(Some(0)).collect();
+                let id: Vec<_> = output_id.encode_utf16().chain(Some(0)).collect();
                 api(
                     enumerator.GetDevice(PCWSTR(id.as_ptr())),
                     "Find selected output (no fallback)",
@@ -106,8 +112,6 @@ impl Stream {
             };
             let client: IAudioClient =
                 api(device.Activate(CLSCTX_ALL, None), "Activate WASAPI output")?;
-            let channels = request.timeline.info().channels;
-            let rate = request.timeline.info().sample_rate;
             let format = WAVEFORMATEX {
                 wFormatTag: 3,
                 nChannels: channels,
@@ -117,8 +121,7 @@ impl Stream {
                 wBitsPerSample: 32,
                 cbSize: 0,
             };
-            let duration =
-                i64::from(request.buffer_frames.clamp(128, 2048)) * 10000000 / i64::from(rate);
+            let duration = i64::from(buffer.clamp(128, 2048)) * 10000000 / i64::from(rate);
             api(
                 client.Initialize(
                     AUDCLNT_SHAREMODE_SHARED,
@@ -156,6 +159,97 @@ impl Drop for Stream {
             let _ = self.client.Stop();
         }
     }
+}
+
+/// The monitor has a separate shared-mode output stream so it can continue after backing ends.
+pub(super) fn monitor(
+    (output_id, rate, channels, buffer): (&str, u32, u16, u32),
+    (stop, paused): (&AtomicBool, &AtomicBool),
+    mut pcm: Consumer,
+) -> std::result::Result<(), String> {
+    let wake = Signal::new().map_err(|e| e.to_string())?;
+    let mut run = || -> Result<()> {
+        unsafe {
+            api(
+                CoInitializeEx(None, COINIT_MULTITHREADED).ok(),
+                "Initialize monitor COM",
+            )?;
+            let _apartment = Apartment;
+            let stream = Stream::open(output_id, channels, rate, buffer, &wake)?;
+            let mut task_index = 0;
+            let _mmcss = windows::Win32::System::Threading::AvSetMmThreadCharacteristicsW(
+                windows::core::w!("Audio"),
+                &mut task_index,
+            )
+            .ok()
+            .map(Mmcss);
+            let channels = usize::from(channels);
+            let backlog = stream.capacity as usize * channels * 2;
+            let mut running = false;
+            while !stop.load(Ordering::Acquire) {
+                if paused.load(Ordering::Acquire) {
+                    if running {
+                        api(stream.client.Stop(), "Pause microphone monitor")?;
+                        api(stream.client.Reset(), "Flush microphone monitor")?;
+                        running = false;
+                    }
+                    pcm.discard(usize::MAX);
+                } else {
+                    // Capture cannot wait for a slow output device. Drop stale monitor audio,
+                    // and leave the separate recording queue untouched.
+                    pcm.discard(pcm.available().saturating_sub(backlog));
+                    if running || pcm.available() >= channels {
+                        let padding = api(
+                            stream.client.GetCurrentPadding(),
+                            "Read microphone monitor padding",
+                        )?;
+                        let available = stream.capacity.saturating_sub(padding);
+                        if available != 0 {
+                            let buffer = api(
+                                stream.render.GetBuffer(available),
+                                "Acquire microphone monitor buffer",
+                            )?;
+                            if buffer.is_null() {
+                                return Err(Failure {
+                                    operation: "Null microphone monitor buffer",
+                                    code: 0,
+                                });
+                            }
+                            let output = std::slice::from_raw_parts_mut(
+                                buffer.cast::<f32>(),
+                                available as usize * channels,
+                            );
+                            let n = pcm.pop(output);
+                            for sample in &mut output[..n] {
+                                *sample = if sample.is_finite() {
+                                    sample.clamp(-1., 1.) * 0.25
+                                } else {
+                                    0.
+                                };
+                            }
+                            output[n..].fill(0.);
+                            api(
+                                stream.render.ReleaseBuffer(available, 0),
+                                "Release microphone monitor buffer",
+                            )?;
+                        }
+                        if !running {
+                            api(stream.client.Start(), "Start microphone monitor")?;
+                            running = true;
+                        }
+                    }
+                }
+                if WaitForSingleObject(wake.0, if running { 20 } else { 5 }) == WAIT_FAILED {
+                    return Err(Failure {
+                        operation: "Wait for microphone monitor event",
+                        code: -1,
+                    });
+                }
+            }
+            Ok(())
+        }
+    };
+    run().map_err(|e| format!("{} (0x{:08x})", e.operation, e.code))
 }
 struct Control {
     ticket: u64,
@@ -227,6 +321,7 @@ fn start(
         .store(reader.info().frames, Ordering::Release);
     progress.frame.store(start, Ordering::Release);
     progress.underruns.store(0, Ordering::Relaxed);
+    progress.meter.reset();
     progress.device_buffer.store(0, Ordering::Relaxed);
     let channels = usize::from(reader.info().channels);
     // Keep less premixed audio queued for interactive mute/solo.
@@ -314,7 +409,14 @@ unsafe fn render(
             "Initialize audio COM",
         )?;
         let _apartment = Apartment;
-        let stream = Stream::open(&request, &wake)?;
+        let format = request.timeline.info();
+        let stream = Stream::open(
+            &request.output_id,
+            format.channels,
+            format.sample_rate,
+            request.buffer_frames,
+            &wake,
+        )?;
         let mut task_index = 0;
         let _mmcss = windows::Win32::System::Threading::AvSetMmThreadCharacteristicsW(
             windows::core::w!("Audio"),
@@ -362,7 +464,7 @@ unsafe fn render(
                     .saturating_sub(padding)
                     .min((pcm.available() / channels) as u32);
                 if available > 0 {
-                    // Deadline-sensitive section: bounded queue reads and memory copies only.
+                    // Deadline-sensitive section: bounded queue reads, copies, and metering.
                     // No file I/O, mutex, allocation, decode, log or UI notification.
                     let buffer = api(stream.render.GetBuffer(available), "Acquire output buffer")?;
                     if buffer.is_null() {
@@ -377,6 +479,7 @@ unsafe fn render(
                     );
                     let n = pcm.pop(output);
                     debug_assert_eq!(n, output.len());
+                    progress.meter.observe(output);
                     api(
                         stream.render.ReleaseBuffer(available, 0),
                         "Release output buffer",

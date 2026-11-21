@@ -1,6 +1,6 @@
 # Additions - 0.6.0
 
-Tools > Preferences now has six tabs: General, Devices, Recording/playback, Editing/keyboard, Accessibility and Export. General controls daily update checks; Editing/keyboard configures track/editing shortcuts; Export selects rate, channels and MP3 bitrate. Apply saves, Cancel discards pending changes. Ctrl+Tab changes category. Live microphone monitoring remains unavailable. Actual NVDA/JAWS checks remain pending.
+Tools > Preferences now has six tabs: General, Devices, Recording/playback, Editing/keyboard, Accessibility and Export. General controls daily update checks; Editing/keyboard configures track/editing shortcuts; Export selects rate, channels and MP3 bitrate. Apply saves, Cancel discards pending changes. Ctrl+Tab changes category. Microphone monitoring is optional and off by default. Use headphones when enabling it. Actual NVDA/JAWS checks remain pending.
 
 ## Historical notes
 
@@ -12,9 +12,9 @@ Five native Windows property-sheet tabs provide standard Ctrl+Tab / Ctrl+Shift+T
 
 | Category | Settings | Current effect |
 | --- | --- | --- |
-| General | English/Spanish, new-project sample rate, Restore defaults | Language updates the main window and dialog after successful Apply. Rate affects new projects, not existing ones. Defaults reset all known choices in the dialog; Apply is still required. |
+| General | Automatic, English or Español, new-project sample rate, Restore defaults | Automatic follows the Windows display language. Spanish display languages use Spanish and other languages use English. Saved English and Spanish choices take priority. Apply updates the main window and dialog. Rate affects new projects, not existing ones. Defaults reset all known choices in the dialog; Apply is still required. |
 | Audio devices | Independent input/output, follow Windows multimedia default, Refresh | Lists endpoints in a worker and remembers IDs. Play opens the selected output; the default is resolved at each Play. Unavailable saved outputs fail without fallback. Record opens the selected input; unavailable saved inputs fail without fallback. Preferences itself opens no stream. |
-| Recording / playback | Mono/stereo, buffer frames, manual offset, monitoring | Buffer size is requested by playback/capture; Windows may enlarge it. Channels and signed offset apply to the next capture. Monitoring is not implemented. |
+| Recording / playback | Mono/stereo, buffer frames, manual offset, monitoring | Buffer size is requested by playback/capture; Windows may enlarge it. Channels and signed offset apply to the next capture. Monitoring uses the chosen output at a reduced listening level and leaves the recording level alone. Transport > Test microphone checks the selected input without saving a take. |
 | Editing / keyboard | Small/large cursor steps, shortcut reference | Left/Right in the main track list move by the small step; Ctrl uses the large step; Shift extends selection from its anchor. Text fields retain their own keys. Shortcut remapping is still pending. |
 | Accessibility | Detailed time confirmation, focus Status after Apply times | Changes main-window confirmation detail and optional focus immediately after successful saving. It never disables native control names/values. |
 

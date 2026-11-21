@@ -66,6 +66,12 @@ impl Consumer {
         self.0.read.store(read.wrapping_add(n), Ordering::Release);
         n
     }
+    #[cfg(windows)]
+    pub fn discard(&mut self, count: usize) {
+        let read = self.0.read.load(Ordering::Relaxed);
+        let n = count.min(self.available());
+        self.0.read.store(read.wrapping_add(n), Ordering::Release);
+    }
 }
 #[cfg(test)]
 mod tests {
