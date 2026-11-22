@@ -58,7 +58,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <a class="skip" href="#guide">Saltar a la guía</a>
 <main id="guide" tabindex="-1">
 <h1>Guía de Sonitrelix</h1>
-<p class="lead">Desde su primera grabación hasta una mezcla multipista. Para Sonitrelix 0.6.4 en Windows.</p>
+<p class="lead">Desde su primera grabación hasta una mezcla multipista. Para Sonitrelix en Windows.</p>
 <p>Español · <a href="user-guide.en.html" lang="en" hreflang="en">Read in English</a></p>
 <p>Use Sonitrelix para grabar, editar y mezclar audio conservando los archivos originales. Puede cambiar entre español e inglés en Preferencias.</p>
 <nav aria-label="Contenido de la guía"><h2 id="contents">Contenido</h2><ol>
@@ -107,6 +107,11 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <p>Ctrl+A selecciona todo el audio de la pista elegida, no todas las pistas. Ctrl+A seguido de Ctrl+X corta todo su audio. Supr elimina la selección y cierra el hueco; no borra el archivo original.</p>
 <h3 id="split-trim">Dividir, recortar e insertar silencio</h3>
 <ul><li><strong>Dividir en el cursor</strong> (Ctrl+T) crea un límite sin quitar audio.</li><li><strong>Recortar a la selección</strong> (Ctrl+Mayús+T) conserva solo el intervalo seleccionado.</li><li><strong>Silenciar selección</strong> (Ctrl+L) sustituye el intervalo por silencio conservando su duración.</li><li><strong>Insertar silencio</strong> (Ctrl+Mayús+I) añade silencio en el cursor y desplaza lo posterior. Dura lo mismo que la selección, o un segundo si no hay intervalo.</li></ul>
+<h3 id="loop-markers">Repetir una selección y marcar puntos importantes</h3>
+<p>Marque ambos límites con <kbd>[</kbd> y <kbd>]</kbd> y pulse F3 en la ventana principal. La mezcla del proyecto se repite entre esos puntos. Pulse F3 o Espacio para detenerla. Ctrl+Espacio pausa o reanuda. Al volver a iniciar la reproducción normal, el audio sigue sin repetirse.</p>
+<p>Con el foco en Pistas o Fragmentos, pulse Ctrl+M en el cursor y escriba un nombre, por ejemplo Estribillo. Pulse F9 para ir al marcador anterior o F11 para ir al siguiente. Sonitrelix anuncia el nombre y el tiempo. En Transporte &gt; Gestionar marcadores puede ir a un marcador o eliminarlo. Guarde el proyecto para conservar los marcadores.</p>
+<h3 id="crossfade">Suavizar la unión de dos fragmentos</h3>
+<p>En Fragmentos, elija el fragmento inmediatamente posterior a la unión y pulse Intro para ir a su inicio. Pulse Ctrl+Mayús+F. Sonitrelix mezcla los últimos 20 ms del primer fragmento con los primeros 20 ms del segundo. Usa un solapamiento menor para fragmentos cortos. El audio posterior de esa pista se adelanta la duración del solapamiento. Las demás pistas conservan sus tiempos. Ctrl+Z recupera la unión original.</p>
 <h3 id="save">Guardar un proyecto o crear un archivo de audio</h3>
 <p>Ctrl+S guarda un <strong>proyecto .sonitrelix</strong>; Ctrl+Mayús+S lo guarda con otro nombre. El proyecto conserva la organización y referencias: no es una mezcla reproducible ni contiene el audio dentro.</p>
 <p>Ctrl+Mayús+E exporta la mezcla audible a un archivo para compartir. Guarde también el proyecto para seguir editando. Al reabrir no se recuperan el historial de deshacer ni la posición y selección actuales.</p>
@@ -116,17 +121,19 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <h3 id="backing-track">Preparar acompañamiento y voz</h3>
 <ol><li>Importe la instrumental con Ctrl+I. Elija su pista, pulse F2 y nómbrela Instrumental.</li><li>Ctrl+Mayús+N añade otra pista; nómbrela Voz.</li><li>Compruebe entrada/salida en Preferencias y póngase auriculares.</li><li>Elija Voz y pulse A para armarla. La instrumental debe ser audible: ni silenciada ni excluida por solo.</li><li>Coloque el cursor en el inicio deseado y pulse R para grabar mientras suenan las otras pistas audibles.</li><li>Ctrl+Espacio pausa o continúa ambos flujos. R o Espacio termina la toma y aparece el fragmento grabado.</li></ol>
 <p>Se graba una pista de destino cada vez. Su audio anterior se excluye del acompañamiento. La toma sustituye el intervalo de destino sin desplazar el audio posterior; si comienza más tarde, se añade el silencio previo necesario.</p>
+<h3 id="punch">Volver a grabar una frase</h3>
+<p>Elija y arme la pista con la toma original y marque la frase con <kbd>[</kbd> y <kbd>]</kbd>. Use auriculares y pulse Ctrl+Mayús+R con el foco en Pistas o Fragmentos. La reproducción empieza hasta tres segundos antes. La pista armada puede sonar durante la reproducción previa y las demás pistas audibles siguen sonando durante la grabación. La toma solo sustituye el audio marcado y termina automáticamente al llegar al final. Ctrl+Z recupera la toma original. Si detiene la grabación cuando ya hay audio, se conserva la parte capturada.</p>
 <h3 id="balance">Equilibrar y organizar pistas</h3>
 <p>En Pistas/Fragmentos, M alterna silencio, S solo y A armado. El modo solo se guarda por pista. Si hay pistas con audio en solo y sin silenciar, la mezcla reproduce esas pistas juntas. Una pista vacía o silenciada en solo no silencia las demás pistas.</p>
 <p>El silencio y el solo se aplican durante la reproducción. El cursor sigue avanzando aunque todas las pistas estén en silencio. A, S y M mantienen el foco en la pista. Al activar solo, el estado también indica si la pista está silenciada o vacía, o si hay varias pistas en solo.</p>
-<p>Ctrl+G abre <strong>Volumen y panorama</strong>. Ajuste los deslizadores con las flechas. El volumen admite de −60 a +24 dB. El panorama va de −100 a la izquierda a +100 a la derecha, con 0 en el centro. Los botones Restablecer devuelven el volumen a 0 dB o el panorama al centro. Pulse Aceptar para confirmar.</p>
+<p>Ctrl+G abre <strong>Volumen y panorama</strong> para toda la pista. Los atajos Alt+Flechas también afectan a toda la pista. Para cambiar el volumen de un intervalo, selecciónelo y elija <strong>Efectos &gt; Amplificar</strong>. Ajuste los deslizadores con las flechas. El volumen admite de −60 a +24 dB. El panorama va de −100 a la izquierda a +100 a la derecha, con 0 en el centro. Los botones Restablecer devuelven el volumen a 0 dB o el panorama al centro. Pulse Aceptar para confirmar.</p>
 <p>Con el foco en Pistas, Alt+Arriba o Alt+Abajo cambia el volumen de la pista seleccionada en 1 dB. Alt+Izquierda o Alt+Derecha mueve el panorama cinco puntos porcentuales. La reproducción continúa mientras ajusta el valor y Sonitrelix anuncia el nuevo ajuste. Ctrl+Z deshace el cambio.</p>
 <p>Ctrl+Mayús+D duplica la pista. Alt+Mayús+Arriba/Abajo la reordena. Ctrl+Mayús+Supr la elimina del proyecto. Deshacer la restaura; los archivos de origen permanecen en disco.</p>
 </section>
 
 <section aria-labelledby="effects"><h2 id="effects">4. Intermedio: efectos y exportación</h2>
 <h3 id="effect-workflow">Escuchar y aplicar un efecto</h3>
-<ol><li>Elija una pista y, opcionalmente, un intervalo. Sin intervalo, se procesa la pista completa.</li><li>Ctrl+E abre Efectos. Elija el efecto y ajuste sus valores.</li><li>Escuchar reproduce una prueba corta. Detenga la prueba antes de otra comparación.</li><li>Aplicar procesa en segundo plano; Cancelar cierra sin aplicar una edición nueva.</li><li>Escuche el resultado. Ctrl+Z recupera el audio anterior si lo necesita.</li></ol>
+<ol><li>Elija la pista. Para procesar una parte, sitúe el foco en Pistas, vaya al inicio, pulse <kbd>[</kbd>, avance hasta el final y pulse <kbd>]</kbd>.</li><li>Ctrl+E abre Efectos. El título indica los tiempos seleccionados o dice Pista completa. Si solo marcó el inicio, marque primero el final. Elija el efecto y ajuste sus valores.</li><li>Escuchar reproduce una prueba corta. Detenga la prueba antes de otra comparación.</li><li>Aplicar procesa en segundo plano; Cancelar cierra sin aplicar una edición nueva.</li><li>Escuche el resultado. Ctrl+Z recupera el audio anterior si lo necesita.</li></ol>
 <p>Los efectos generan audio nuevo sin reescribir originales. Son ediciones procesadas que se pueden deshacer, no una cadena de complementos en directo. Escuche el resultado completo antes de exportar.</p>
 <dl><dt>Amplificar y Normalizar</dt><dd>Cambian el nivel. Comience con cambios pequeños. Normalizar ajusta un pico, no la sonoridad percibida.</dd><dt>Fundido de entrada y salida</dt><dd>Aumentan o reducen el nivel a lo largo de la región.</dd><dt>Invertir y Silencio</dt><dd>Invierten el orden de las muestras o sustituyen la región por silencio.</dd><dt>Ecualizador básico</dt><dd>Ajusta graves, medios y agudos.</dd><dt>Compresor</dt><dd>Reduce picos por encima de un umbral. Compare a un nivel de escucha parecido.</dd><dt>Puerta de ruido</dt><dd>Reduce pasajes por debajo del umbral. Un ajuste agresivo puede quitar palabras suaves.</dd><dt>Reverberación</dt><dd>Añade ambiente reverberante. Pruebe poca cantidad para conservar la claridad de la voz.</dd></dl>
 <p>En Efectos y Volumen y panorama, Tab pasa de cada deslizador a su botón Restablecer. Use las flechas para ajustes pequeños o RePág y AvPág para cambios mayores. Inicio y Fin llevan a los límites.</p>
@@ -135,6 +142,9 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <p>Ctrl+E ofrece Reducción de ruido para ruido constante, Reductor de sibilancia para eses fuertes, Eliminar zumbido de 50 o 60 Hz y Cambiar tempo sin alterar el tono. Cambiar tempo desplaza el audio posterior en la pista editada. Use Escuchar, Aplicar y Ctrl+Z.</p>
 <p>Para la Atenuación automática, seleccione el acompañamiento y elija la voz de control en Efectos. La voz atenúa el acompañamiento en los momentos correspondientes. La escucha previa reproduce solo el acompañamiento procesado. Aplicar se puede deshacer. Reproduzca el proyecto para oír ambas pistas.</p>
 <p>La reducción estima el ruido de fondo en los momentos más silenciosos. Incluya una breve pausa con el ruido constante que desea reducir.</p>
+<h3 id="fastplugs">Usar los efectos de FastPlugs</h3>
+<p>Descargue el ZIP de Windows x64 desde la <a href="https://github.com/masonasons/FastPlugs/releases/tag/latest">versión de FastPlugs</a>. Extraiga <code>FastPlugs.clap</code> en la carpeta <code>data/plugins</code> de Sonitrelix, instálelo en la carpeta CLAP de Windows o seleccione el archivo extraído cuando Efectos &gt; FastPlugs lo solicite.</p>
+<p>Marque un intervalo en la pista y abra Efectos &gt; FastPlugs. Elija un efecto y use Parámetros para consultar y cambiar sus controles. Elija Escuchar para oír una prueba o Aplicar para procesar el intervalo. Ctrl+Z recupera el audio anterior. La edición conserva su duración. Para oír la cola de reverberación o eco, incluya silencio al final del intervalo.</p>
 <h3 id="export">Exportar la mezcla</h3>
 <ol><li>Escuche el proyecto y compruebe silencio, solo, volumen y panorama.</li><li>En Preferencias &gt; Exportación elija frecuencia, canales mono/estéreo y tasa MP3. Aplique los cambios.</li><li>Ctrl+Mayús+E abre la exportación. Elija formato, nombre y destino. FFmpeg permite AAC en M4A a 192 kbps y Opus a 128 kbps y 48 kHz. También puede codificar MP3 si Windows no puede iniciar su codificador.</li><li>Espere. Escape en la ventana principal cancela la exportación activa sin dañar un destino existente.</li><li>Reabra el resultado y verifique sonido, duración y canales.</li></ol>
 <p>Se exporta toda la mezcla audible, no solo la selección o pista elegida. Para un extracto, elija Archivo &gt; Exportar audio de la selección (Ctrl+Mayús+X). Exporta solo el intervalo de la pista, con su volumen y panorama, independientemente de silencio y solo. Los originales importados están protegidos contra sobrescritura.</p>
@@ -144,6 +154,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <section aria-labelledby="preferences"><h2 id="preferences">5. Configurar las preferencias</h2>
 <p>Ctrl+, abre Herramientas &gt; Preferencias. Ctrl+Tab y Ctrl+Mayús+Tab cambian categoría; Tab recorre controles. F1 o Ctrl+H abre la ayuda de categoría mientras Preferencias está activo.</p>
 <ul><li><strong>General:</strong> idioma, frecuencia de proyectos nuevos y comprobación de actualizaciones. El ajuste predeterminado es Automático. Usa español cuando el idioma de visualización de Windows es español e inglés en los demás casos. Puede elegir English o Español.</li><li><strong>Dispositivos de audio:</strong> entrada/salida independientes y actualización de la lista.</li><li><strong>Grabación / reproducción:</strong> canales, búfer, desplazamiento manual y monitorización opcional con auriculares.</li><li><strong>Edición / teclado:</strong> pasos del cursor y Atajos de teclado.</li><li><strong>Accesibilidad:</strong> lectura detallada de tiempos y opciones disponibles de foco/estado.</li><li><strong>Exportación:</strong> frecuencia de salida, canales y tasa MP3.</li></ul>
+<p>Las preferencias se conservan al volver a abrir la misma copia portátil. Si extrae otra copia, esta tendrá su propio archivo <code>data/preferences.json</code>. Use Aplicar o Aceptar para guardar los cambios.</p>
 <h3 id="custom-keys">Personalizar los atajos</h3>
 <p>En Edición / teclado, abra Atajos de teclado, elija una acción e introduzca una combinación. Puede cambiar acciones de edición, pistas, efectos y transporte. Aplicar en Preferencias guarda. Se rechazan conflictos y combinaciones reservadas; las teclas globales de proyecto y ayuda permanecen fijas.</p>
 <p>Las tablas muestran valores predeterminados. Si los cambia, use los de sus preferencias. Las letras simples se usan en Pistas/Fragmentos, no mientras escribe texto. Cambiar el idioma no cambia las combinaciones físicas.</p>
@@ -153,6 +164,8 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <h3 id="recording-levels">Comprobar niveles del micrófono y de reproducción</h3>
 <p>Elija Transporte &gt; Probar micrófono antes de grabar. Hable al volumen máximo que espera usar y pulse F8 para oír el pico. La prueba termina a los 30 segundos o al pulsar Escape. La prueba no guarda audio ni envía el micrófono a los altavoces.</p>
 <p>Durante la reproducción o grabación, F8 anuncia el pico en dBFS desde la última consulta o desde que se inició el audio. En una grabación sobre música anuncia por separado el micrófono y el acompañamiento. La indicación de saturación se conserva hasta iniciar otro flujo o prueba. Se avisa una vez por toma cuando satura el micrófono. Baje la ganancia del micrófono o de la entrada de Windows.</p>
+<h3 id="calibration">Medir el desplazamiento de grabación</h3>
+<p>Elija en Preferencias la entrada y la salida que desea medir. Abra Herramientas &gt; Calibrar desplazamiento de grabación y siga las indicaciones. El micrófono debe oír los altavoces o la entrada elegida debe recibir la señal de prueba a través de una conexión de retorno por cable. Se reproducen tres sonidos breves. Si la medición es consistente, confirme para guardarla en Grabación / reproducción. Si cambia los dispositivos o el búfer, vuelva a medir o cambie el ajuste manual. Escape cancela la prueba.</p>
 <h3 id="alignment">Compensar el retraso de grabación</h3>
 <p>Si la voz queda tarde, pruebe un desplazamiento negativo en milisegundos en Grabación / reproducción. Los valores positivos colocan la toma más tarde; los negativos, antes, sin pasar del inicio del proyecto. El intervalo permitido es de −2000 a +2000 milisegundos.</p>
 <ol><li>Grabe una palmada breve siguiendo una señal conocida del acompañamiento con auriculares.</li><li>Compare el momento, ajuste el desplazamiento y haga una toma nueva.</li><li>Repita al cambiar dispositivo o búfer. Pruebe también pausa/continuación y una toma larga.</li></ol>
@@ -180,6 +193,10 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <tr><th scope="row" data-key="Ctrl+Shift+E">Ctrl+Mayús+E</th><td>Exportar la mezcla audible.</td></tr>
 <tr><th scope="row" data-key="Ctrl+,">Ctrl+,</th><td>Abrir Preferencias.</td></tr>
 <tr><th scope="row" data-key="F1">F1</th><td>Abrir guía; en Preferencias, ayuda de categoría.</td></tr>
+<tr><th scope="row" data-key="F3">F3</th><td>Iniciar o detener la repetición de la selección en la ventana principal.</td></tr>
+<tr><th scope="row" data-key="F9">F9</th><td>Ir al marcador anterior y anunciar nombre y tiempo.</td></tr>
+<tr><th scope="row" data-key="F11">F11</th><td>Ir al marcador siguiente y anunciar nombre y tiempo.</td></tr>
+<tr><th scope="row" data-key="Ctrl+M">Ctrl+M</th><td>Añadir un marcador con nombre en el cursor desde Pistas o Fragmentos.</td></tr>
 <tr><th scope="row" data-key="F6">F6</th><td>Enfocar lectura de transporte.</td></tr>
 <tr><th scope="row" data-key="F7">F7</th><td>Enfocar lectura de selección.</td></tr>
 <tr><th scope="row" data-key="F8">F8</th><td>Anunciar picos de entrada y reproducción y si hubo saturación.</td></tr>
@@ -191,6 +208,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <table><caption>Transporte en Pistas/Fragmentos; Espacio y Ctrl+Espacio también funcionan en la lectura del transporte</caption><thead><tr><th scope="col">Tecla o combinación</th><th scope="col">Descripción</th></tr></thead><tbody>
 <tr><th scope="row" data-key="Space">Espacio</th><td>Reproducir/detener mezcla; detener grabación activa.</td></tr>
 <tr><th scope="row" data-key="Ctrl+Space">Ctrl+Espacio</th><td>Pausar/continuar reproducción o grabación con acompañamiento.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+R">Ctrl+Mayús+R</th><td>Grabar sobre la selección de la pista armada tras una breve reproducción previa.</td></tr>
 <tr><th scope="row" data-key="R">R</th><td>Iniciar/detener grabación en la pista armada.</td></tr>
 </tbody></table>
 <h3 id="keys-edit">Edición de audio</h3>
@@ -207,6 +225,7 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <tr><th scope="row" data-key="Delete">Supr</th><td>Eliminar selección cerrando el hueco.</td></tr>
 <tr><th scope="row" data-key="Ctrl+T">Ctrl+T</th><td>Dividir el fragmento en el cursor.</td></tr>
 <tr><th scope="row" data-key="Ctrl+Shift+T">Ctrl+Mayús+T</th><td>Conservar solo el intervalo seleccionado.</td></tr>
+<tr><th scope="row" data-key="Ctrl+Shift+F">Ctrl+Mayús+F</th><td>Aplicar un fundido cruzado entre los fragmentos contiguos al cursor.</td></tr>
 <tr><th scope="row" data-key="Ctrl+L">Ctrl+L</th><td>Silenciar selección sin cambiar duración.</td></tr>
 <tr><th scope="row" data-key="Ctrl+Shift+I">Ctrl+Mayús+I</th><td>Insertar silencio: duración seleccionada o un segundo.</td></tr>
 <tr><th scope="row" data-key="Ctrl+E">Ctrl+E</th><td>Abrir Efectos para la selección o pista completa.</td></tr>

@@ -1,4 +1,4 @@
-# Multitrack workflow — 0.6.0
+# Multitrack recording and mixing
 
 Use headphones and a disposable project. Select input/output independently in Tools > Preferences. Recording channels must match an existing target track. Use Transport > Test microphone and F8 to check input before a take. Optional microphone monitoring is off by default and should be used with headphones.
 
@@ -9,7 +9,7 @@ Use headphones and a disposable project. Select input/output independently in To
 5. Enter exact selection times. Ctrl+A selects the whole selected track; Ctrl+C/X/V, Delete, split and trim edit it. Ctrl+E previews/applies effects, including reverb. Undo restores previous audio references.
 6. Preferences > Export selects rate, channels and MP3 bitrate. Ctrl+Shift+E exports WAV, FLAC or MP3. Reopen and compare the result. MP3 includes possible encoder priming/padding; use WAV/FLAC for exact duration.
 7. Save/reopen and verify names, state, boundaries and mix. Keep originals and data/imports and data/recordings: projects reference assets rather than embedding them.
-8. Leave unsaved edits for 30 seconds, terminate only a disposable instance, then reopen and recover its metadata checkpoint. Incomplete recordings and power loss are not guaranteed recoverable.
+8. Leave unsaved edits for 30 seconds, terminate only a disposable instance, then reopen and recover its metadata checkpoint. If a take was interrupted, Ctrl+I can recover complete frames from a Sonitrelix PCM16 recording with a readable header.
 
 Repeat without a mouse using NVDA and then JAWS. Verify names, values, focus, errors, transport, numeric selection, effects, export and recovery. Test real microphone removal, pause/resume alignment, long sessions, high contrast, enlarged text and Windows 10 separately. Serious reader failures block release. Those manual results remain pending.
 
@@ -17,4 +17,4 @@ Clips are consecutive regions with explicit silence gaps, not freely overlapping
 
 ## Español
 
-Importe música con Ctrl+I, cree pista con Ctrl+Mayús+N, nombre con F2, arme con A y grabe/detenga con R. Use auriculares. Ctrl+Espacio pausa ambos flujos. Ajuste el desfase manual y compruebe la alineación escuchando. Ctrl+G ajusta volumen/panorama, Ctrl+E abre efectos y Ctrl+Mayús+E exporta. Conserve los originales y las carpetas de audio de data. Pruebe todo sin ratón con NVDA y JAWS. La recuperación guarda metadatos cada 30 segundos; no garantiza grabaciones incompletas. Faltan pruebas reales de hardware y lectores.
+Importe música con Ctrl+I, cree pista con Ctrl+Mayús+N, nombre con F2, arme con A y grabe/detenga con R. Use auriculares. Ctrl+Espacio pausa ambos flujos. Ajuste el desfase manual y compruebe la alineación escuchando. Ctrl+G ajusta volumen/panorama, Ctrl+E abre efectos y Ctrl+Mayús+E exporta. Conserve los originales y las carpetas de audio de data. Pruebe todo sin ratón con NVDA y JAWS. Se guardan puntos de recuperación de metadatos cada 30 segundos. Puede importar audio recuperable de una toma interrumpida con Ctrl+I. Quedan por probar desconexiones, sesiones largas y el recorrido completo con NVDA y JAWS.

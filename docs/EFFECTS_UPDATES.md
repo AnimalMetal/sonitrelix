@@ -1,39 +1,31 @@
-# Effects and updates — 0.5.0
+# Effects and updates
 
 ## Use an effect
 
-1. Choose a track. Select a time range if wanted; without a range, the effect uses the whole selected track.
-2. In Tracks or Clips press Ctrl+E, or open Effects > Effects.
-3. Choose an effect with the arrow keys. Tab to its numeric settings, then Preview or Apply. Preview processes the first five seconds plus the reverb tail. Stop preview stops listening. Cancel cancels processing and closes. Ctrl+Z undoes Apply.
+1. Choose a track and optionally select a time range. From Tracks or Clips, press **Ctrl+E** to open Effects.
+2. Select an effect and Tab to its sliders. Use arrows for small steps, Page Up or Page Down for larger steps, and each Reset button to restore its default.
+3. Preview auditions the first five seconds of the range, plus any reverb tail. Use Stop preview to stop listening; Apply processes the full range, or the whole track when there is no selection. Cancel closes the window and Ctrl+Z undoes a committed effect.
 
-Amplify uses gain -60 to +24 dB. Normalize uses peak target -60 to 0 dB and scans the selected audio first. Fades are linear. Reverse preserves channel ordering. Silence preserves duration. Basic EQ uses smooth low/mid/high bands split at about 200/4000 Hz, each -24 to +24 dB. Compressor uses a linked-channel peak envelope, fixed 5 ms attack/100 ms release, threshold -80 to 0 dB, ratio 1–20 and makeup 0–24 dB. Gate uses a linked peak detector, threshold -100 to 0 dB and configurable attack/release. These are basic processors, not mastering tools.
+Amplify and Normalize adjust level; Normalize measures the peak first. Fades are linear. Reverse keeps stereo channel order. Silence preserves the range duration. The basic EQ has low, mid and high bands. The compressor and noise gate use linked channels. Reverb uses wet mix, decay and tail sliders. A longer tail extends the selection and moves later audio; a zero tail preserves duration.
 
-Reverb uses four feedback delay lines per channel. Wet mix 0–100%, decay 0.1–10 seconds and appended tail 0–10 seconds. Added tail extends the selected audio and moves later audio; set tail to zero to preserve duration. This is an offline rendered effect. Input monitoring and real-time recording effects are not implemented.
+Applied effects create new float32 WAV assets in `data/effects`. Preserve them with the project. Undo restores the previous references. Temporary preview files are removed when the Effects window closes. High gains can clip on playback or export. F8 reports playback peaks and clipping. The [FFmpeg guide](FFMPEG.md) covers noise reduction, de-essing, de-hum, tempo and ducking.
 
-Rendering streams bounded blocks to a newly created float32 WAV with a fact chunk in data/effects. Keep those files with the project. Original imports/recordings remain unchanged. Undo restores the original source references; it does not delete generated assets. Preview files are also retained in this folder, so repeated previews consume disk space. High gains may exceed full scale and clip on output; normalize or reduce gain. No automatic limiter is applied.
+For acceptance, verify every parameter's label, value and Reset action, then Preview, Apply, Cancel and Undo with keyboard and screen reader. Compare the affected audio and surrounding clips. Test cancellation on a long selection and check that originals remain intact.
 
-## Test effects with keyboard and screen readers
+## FastPlugs
 
-Use disposable copies, first with NVDA, then JAWS. Import a short mono WAV and a stereo WAV. Ctrl+A, Ctrl+E should open a named effect selector; Tab reads each parameter label/value and Preview, Stop preview, Apply, Cancel, and read-only Status. Verify every effect's valid defaults, invalid/NaN/out-of-range values, decimal entry, keyboard dropdown and Escape behavior. Text fields must keep their editing keys.
+Download the Windows x64 CLAP bundle from the [FastPlugs release](https://github.com/masonasons/FastPlugs/releases/tag/latest). Extract `FastPlugs.clap` into `data/plugins` beside your Sonitrelix executable, install it into the standard Windows CLAP folder, or select the file when prompted by **Effects > FastPlugs**.
 
-Preview each effect, compare listening at safe volume, Apply, undo/redo, save/reopen and preview again. Verify audio outside the selected interval is unchanged. Check reverse channel order, fade endpoints, normalized peak, compressor/gate transitions, reverb tail length and stereo behavior. Set reverb wet/tail to zero for a duration-preserving dry comparison. With a long selection, cancel during rendering and verify the UI remains responsive and the project unchanged. Test unwritable/full disk and source disconnection, focus retention, high contrast, DPI and English/Spanish labels. Actual NVDA/JAWS and listening checks remain pending.
+Select a track and the time range to process. Choose a plug-in and open Parameters to read or enter its own value text, such as `8 dB`. Preview auditions up to five seconds. Apply renders the selected range, or the whole track when no range is active. Output length is unchanged and plug-in latency is compensated. Keep some silence in the target range if you want to hear a reverb or echo decay. Ctrl+Z restores the previous edit. The two live utilities, Buffer and Clipping Monitor, are outside the offline effect list.
 
 ## Check for updates
 
-Help > Check for updates runs a background HTTPS query to the fixed GitHub repository. It compares numeric stable versions, refuses draft/prerelease results and requires a published Windows ZIP on a newer release. Its named read-only result supports reading/copy/search. Open download page opens the fixed official release page in the browser. No executable is downloaded, extracted or installed by the application.
+In a portable build, **Help > Check for updates** opens the update result. **Install update** verifies signed metadata and the executable before replacing it and restarting. **Cancel transfer** stops the download. **Skip this version** saves a preference for automatic checks, and a manual check can offer the same version again. **Open download page** opens the complete Windows ZIP when you need a full package.
 
-The request uses Windows WinHTTP with certificate validation, system proxy discovery, timeouts, no redirects and a 256 KiB response limit. It sends the application version in User-Agent; it uses no GitHub token. A missing/private repository and no published release can both produce 404. Network errors and rate limits are shown as failures, not as “up to date.” A development version newer than the latest release is never offered a downgrade. Results are not saved as a trusted anti-rollback floor.
-
-Test no releases, same/older version, newer release with the expected ZIP, missing ZIP, malformed versions, oversized response, invalid JSON, rate limits and offline errors. Verify language changes, text focus and download-page keyboard access. Parser/native-control tests pass locally; live HTTPS, browser routing, first tagged release publishing and an end-to-end update remain unverified here because network access is restricted.
-
-## Automatic installation remains pending
-
-This is a release checker and manual-download flow. It is not a self-updater. Automatic replacement needs an embedded trusted public key and signed manifests, package validation, safe extraction, data preservation, backup/health confirmation and tested rollback. No executable replacement is allowed without that trust path. No private signing key has been generated or committed. The updater skill's rule is “Sin firma válida, sin claves configuradas ... se rechaza.” It informed the decision to keep this stage read-only.
-
-References: [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release), [WinHTTP request API](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopenrequest), [WinHTTP timeouts](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpsettimeouts), [GitHub release publishing](https://cli.github.com/manual/gh_release_create).
+The signed updater preserves the data folder and rolls back if startup fails. See [signed portable updates](UPDATES.md) for the release process and scope. Live installation to 0.6.4 passed from the published 0.6.3 portable build.
 
 ## Español
 
-Seleccione una pista y, si quiere, un intervalo. Ctrl+E abre Efectos: elija efecto, cambie valores y use Escuchar o Aplicar. Sin intervalo se procesa la pista completa. Ctrl+Z deshace. Reverberación añade una cola configurable que desplaza audio posterior; cero conserva duración. Se guardan WAV nuevos en data/effects; conserve esa carpeta y los originales.
+Ctrl+E abre Efectos. Ajuste los deslizadores con las flechas y use Restablecer para recuperar el valor inicial. Puede escuchar el resultado, aplicar o cancelar. Ctrl+Z deshace el efecto. Conserve los archivos de `data/effects`.
 
-Ayuda > Buscar actualizaciones consulta Releases en segundo plano y muestra texto de solo lectura. Abrir descarga abre la página oficial. La instalación es manual; el programa no descarga ni sustituye ejecutables. Actualización automática con firmas y vuelta atrás sigue pendiente. Pruebas de escucha, NVDA/JAWS, publicación de etiquetas y conexión HTTPS real siguen pendientes.
+Ayuda > Buscar actualizaciones permite descargar, verificar e instalar una versión portable más reciente. La actualización conserva la carpeta de datos y recupera el ejecutable anterior si falla el arranque.

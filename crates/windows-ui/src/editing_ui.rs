@@ -166,6 +166,7 @@ impl App {
             }
             let start: u64 = track.clips[..i].iter().map(|c| c.frames).sum();
             let end = start + track.clips[i].frames;
+            self.editor.bracket_start = None;
             self.editor.exact_selection = Some((index, start, end));
             self.editor.exact_cursor = Some((index, start));
             self.position = sonitrelix_audio_io::frames_to_ms(start, track.sample_rate);
@@ -405,21 +406,29 @@ impl App {
                 .map(|(_, f)| f)
                 .unwrap_or_else(|| sonitrelix_audio_io::ms_to_frames(self.position, rate));
             if id == SELECT_ALL {
+                if self.project.tracks[i].frames() == 0 {
+                    self.timeline_feedback(&self.t("edit_empty_selection"));
+                    return;
+                }
                 self.editor.bracket_start = None;
                 self.editor.exact_selection = Some((i, 0, self.project.tracks[i].frames()));
                 self.selection = (0, ceil_ms(self.project.tracks[i].frames(), rate));
                 self.selection_anchor = None;
                 self.sync_times();
-                self.selection_status();
+                self.timeline_feedback(
+                    &self
+                        .t("edit_all_selected")
+                        .replace("{track}", &self.project.tracks[i].name),
+                );
                 return;
             }
             if id == COPY {
                 match edit::copy(&self.project.tracks[i], a, b) {
                     Ok(c) => {
                         self.editor.clipboard = Some(c);
-                        self.status(&self.t("edit_copied"));
+                        self.timeline_feedback(&self.t("edit_copied"));
                     }
-                    Err(key) => self.status(&self.t(key)),
+                    Err(key) => self.timeline_feedback(&self.t(key)),
                 }
                 return;
             }
@@ -467,7 +476,7 @@ impl App {
                 _ => return,
             };
             match result {
-                Err(key) => self.status(&self.t(key)),
+                Err(key) => self.timeline_feedback(&self.t(key)),
                 Ok(()) => {
                     let mut candidate = self.project.clone();
                     candidate.tracks[i] = next.clone();
@@ -494,7 +503,11 @@ impl App {
                     self.dirty = true;
                     self.refresh();
                     self.sync_times();
-                    self.selection_status();
+                    match id {
+                        CUT => self.timeline_feedback(&self.t("edit_cut_done")),
+                        PASTE => self.timeline_feedback(&self.t("edit_paste_done")),
+                        _ => self.selection_status(),
+                    }
                     self.log("audio_edit_applied");
                 }
             }

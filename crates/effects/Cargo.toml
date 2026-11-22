@@ -5,3 +5,8 @@ edition.workspace = true
 license.workspace = true
 [dependencies]
 sonitrelix-audio-io = { path = "../audio-io" }
+
+[target.'cfg(windows)'.dependencies]
+clap-sys = "0.6.0"
+libloading = "0.9.1"
+serde.workspace = true

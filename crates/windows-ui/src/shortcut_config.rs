@@ -120,6 +120,19 @@ fn configured<'a>(
         .filter(|s| chord(s).is_some())
         .unwrap_or(default)
 }
+fn fixed_timeline_shortcut(action: Option<Action>) -> bool {
+    matches!(
+        action,
+        Some(Action::Command(
+            LOOP_SELECTION
+                | timeline_tools::ADD_MARKER
+                | timeline_tools::PREVIOUS_MARKER
+                | timeline_tools::NEXT_MARKER
+                | timeline_tools::CROSSFADE
+                | recording_ui::PUNCH
+        ))
+    )
+}
 pub(super) fn route(
     key: usize,
     ctrl: bool,
@@ -129,7 +142,7 @@ pub(super) fn route(
     settings: &sonitrelix_settings::Settings,
 ) -> Option<Action> {
     let default = shortcuts::route(key, ctrl, shift, alt, scope);
-    if !scope.editing() {
+    if !scope.editing() || fixed_timeline_shortcut(default) {
         return default;
     }
     let pressed = Chord {
@@ -158,8 +171,9 @@ fn valid_assignment(settings: &sonitrelix_settings::Settings, id: &str, text: &s
     if shortcuts::route(c.key, c.ctrl, c.shift, c.alt, Scope::Other).is_some() {
         return false;
     }
-    if shortcuts::route(c.key, c.ctrl, c.shift, c.alt, Scope::Surface)
-        == Some(Action::Command(export_ui::EXPORT_SELECTION))
+    let surface = shortcuts::route(c.key, c.ctrl, c.shift, c.alt, Scope::Surface);
+    if surface == Some(Action::Command(export_ui::EXPORT_SELECTION))
+        || fixed_timeline_shortcut(surface)
     {
         return false;
     }

@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Clip {
@@ -69,12 +69,20 @@ impl Track {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Marker {
+    pub name: String,
+    pub frame: u64,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Project {
     pub version: u32,
     pub sample_rate: u32,
     pub tracks: Vec<Track>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub original_sources: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<Marker>,
 }
 impl Default for Project {
     fn default() -> Self {
@@ -83,6 +91,7 @@ impl Default for Project {
             sample_rate: 48000,
             tracks: vec![],
             original_sources: vec![],
+            markers: vec![],
         }
     }
 }
@@ -125,7 +134,7 @@ impl Project {
             }
             p.version = SCHEMA_VERSION;
         }
-        if p.version == 3 {
+        if [3, 4].contains(&p.version) {
             p.version = SCHEMA_VERSION;
         }
         p.validate()?;
@@ -136,6 +145,16 @@ impl Project {
             || !(8000..=384000).contains(&self.sample_rate)
             || self.original_sources.len() > 100000
             || self.original_sources.iter().any(|p| !p.is_absolute())
+            || self.markers.len() > 10000
+            || self.markers.iter().any(|marker| {
+                marker.name.trim().is_empty()
+                    || marker.name.len() > 256
+                    || marker.name.chars().any(char::is_control)
+            })
+            || self
+                .markers
+                .windows(2)
+                .any(|pair| pair[0].frame > pair[1].frame)
             || self.tracks.iter().any(|t| {
                 t.name.trim().is_empty()
                     || !t.gain.is_finite()
@@ -302,6 +321,18 @@ mod tests {
         p.add_track("Voz ñ".into());
         p.save(&path).unwrap();
         assert_eq!(Project::load(&path).unwrap(), p);
+        fs::write(&path, br#"{"version":4,"sample_rate":48000,"tracks":[]}"#).unwrap();
+        let legacy = Project::load(&path).unwrap();
+        assert_eq!(legacy.version, SCHEMA_VERSION);
+        assert!(legacy.markers.is_empty());
+        p.markers.push(Marker {
+            name: "Verse 2".into(),
+            frame: 144_001,
+        });
+        p.markers.push(Marker {
+            name: "Coro".into(),
+            frame: 192_000,
+        });
         p.tracks[0].mute = true;
         p.save(&path).unwrap();
         assert_eq!(Project::load(&path).unwrap(), p);

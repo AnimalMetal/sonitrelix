@@ -143,7 +143,8 @@ class Guide(HTMLParser):
         assert set(self.labels) <= self.ids
         for link in self.links:
             assert (link.startswith("#") and link[1:] in self.ids) or link in {
-                "user-guide.en.html", "user-guide.es.html"
+                "user-guide.en.html", "user-guide.es.html",
+                "https://github.com/masonasons/FastPlugs/releases/tag/latest",
             }, f"Invalid guide link {link}"
 
     def plaintext(self):

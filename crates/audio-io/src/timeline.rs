@@ -310,9 +310,7 @@ impl TimelineReader {
     pub fn seek_frame(&mut self, frame: u64) -> io::Result<u64> {
         let target = frame.min(self.timeline.format.frames);
         self.mix_position = target;
-        for track in &mut self.mix {
-            track.count = 0;
-        }
+        // Resampler caches are keyed by absolute source frames and stay valid after a seek.
         let mut n = target;
         self.index = 0;
         while self.index < self.timeline.segments.len()

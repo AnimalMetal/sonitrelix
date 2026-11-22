@@ -1,4 +1,28 @@
-# User guide follow-up - 0.6.0
+# Validation
+
+## Punch-in recording in 0.6.5
+
+The opt-in Windows integration test uses the default WASAPI input and output and a silent backing track. It exercises the native bracket and punch-in commands with a 3-second lead-in and a −25 ms recording offset. It verifies that the microphone capture stops automatically at exactly 14,776 frames, that the two original clip regions and the backing track are unchanged, and that Undo and Redo restore the expected takes. Stopping during the lead-in leaves the project unchanged and creates no additional take. The test deletes its temporary audio.
+
+```powershell
+cargo test -p sonitrelix-windows-ui --locked native_punch_captures_only_marked_frames_over_backing_and_undo_restores_take -- --ignored --nocapture --test-threads=1
+```
+
+Headphone listening, acoustic alignment with audible music, and the spoken cue with NVDA and JAWS still need hands-on checks.
+
+## Release 0.6.4
+
+- The Windows release build passed formatting, Clippy, the bilingual guide check and 63 workspace tests, including 21 native UI tests.
+- Windows audio integration checks covered endpoint discovery, a short microphone recording with backing playback and pause/resume, silent monitor output, missing endpoints and playback seek/stop.
+- Recovery tests verified that complete frames beyond a stale WAV header were copied without changing the original. Meter tests verified peak readings and the retained clipping flag.
+- The GitHub Windows ZIP and signed update were verified. The published 0.6.3 build downloaded 0.6.4, installed it, restarted and preserved the data folder.
+- A user reported that the screen-reader workflow worked on their setup. Formal NVDA and JAWS walkthroughs, headphone listening, physical USB disconnect, long-take alignment, Windows 10 and enlarged-text/high-contrast checks still need recorded results. See [accessibility acceptance](ACCESSIBILITY.md) and the [multitrack checklist](MULTITRACK.md).
+
+## Historical test notes
+
+The entries below describe earlier builds and their coverage at the time. Use the current guides for supported workflows.
+
+### User guide follow-up in 0.6.0
 
 The bilingual HTML user guide now progresses from beginner to advanced, with linked contents and six two-column shortcut tables per language. The native F1 text is generated from the same content; Help provides an Open HTML guide action. HTML is self-contained, embedded and refreshed for both languages under data/docs, and copied into portable packages.
 
@@ -6,9 +30,7 @@ Passed the documentation check (heading levels, IDs, links, table headers/captio
 
 Browser preview was unavailable: the browser access host was unavailable and Computer Use did not approve Microsoft Edge. Visual layout, browser navigation/printing, end-to-end default-browser opening and actual NVDA/JAWS reading are unverified. No browser security restriction was bypassed. See USER_GUIDE_MAINTENANCE.md for the remaining manual checks.
 
-## Previous validation
-
-# Current validation - 0.6.0
+### Earlier 0.6.0 validation
 
 Passed 53 ordinary workspace tests and 3 separately invoked Windows endpoint/engine checks (56 total). Final native UI rerun: 15 passed. Formatting, Clippy with warnings denied and release compilation passed. The release executable reports 0.6.0.
 
@@ -30,9 +52,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1
 
 Portable packaging passed ZIP CRC/integrity, marker presence, byte-for-byte EXE matching, SHA-256 and exclusion of data/private keys. The real release manifest was signed offline and verified by the Rust updater against the exact EXE (Ed25519, size and SHA-256). No release was published. A fresh portable EXE reached an input-idle/responding state, logged startup and closed gracefully after WM_CLOSE targeted SonitrelixMain. The generic process helper initially selected an input-method window; no app shutdown defect was observed. This is a process/API smoke check, not screen-reader or independent keyboard validation.
 
-## Historical records
-
-# Validation record — 2026-11-20
+### Validation record from 2026-11-20
 
 ## Historical build — 0.5.0
 
@@ -40,7 +60,7 @@ Passed 38 ordinary workspace tests and three explicitly invoked Windows audio in
 
 New tests cover gain, normalization, fades, unity EQ, linked compressor/gate, reverb impulse/tail and chunk continuity, reverse preserving stereo ordering, float32 render roundtrip, cancellation and original-source preservation. Native tests cover all ten effect choices and default parameters, NaN rejection, background Apply, output length/encoding, field names and mnemonic conflicts in English/Spanish. Applying a rendered effect is exercised through project undo/redo. Release fixtures cover numeric versions, draft/prerelease boundaries, rate limits, missing/mismatched package URLs and oversized response rejection. Updates use the tested read-only help viewer.
 
-The three audio integration checks passed on the existing active Windows endpoints with silent playback fixtures and an invalid-input test only; no microphone was activated. Actual effect preview listening, independent keyboard/NVDA/JAWS use, screen layouts at all scales, real HTTPS responses, browser download routing and the new tag-to-Release publisher remain unverified. Automatic installation/signature verification is not implemented. See EFFECTS_UPDATES.md for the current manual checklist and limits.
+The three audio integration checks passed on the existing active Windows endpoints with silent playback fixtures and an invalid-input test only; no microphone was activated. Actual effect preview listening, independent keyboard/NVDA/JAWS use, screen layouts at all scales, real HTTPS responses, browser download routing and the new tag-to-Release publisher remain unverified. Automatic installation/signature verification is not implemented. See [Effects and updates](EFFECTS_UPDATES.md) for the current behavior.
 
 The external dependency graph remains unchanged; effects are original Rust code and WinHTTP is a Windows system API. No new codec, cryptography or networking package was introduced.
 

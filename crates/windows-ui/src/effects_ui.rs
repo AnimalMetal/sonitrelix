@@ -9,6 +9,37 @@ use std::sync::{
     mpsc::{self, Receiver, TryRecvError},
 };
 pub(super) const EFFECTS: usize = 850;
+pub(super) fn effect_timeline(
+    track: &sonitrelix_session::Track,
+    start: u64,
+    end: u64,
+) -> std::io::Result<Timeline> {
+    Timeline::new(
+        track.sample_rate,
+        track.channels,
+        sonitrelix_editing::pieces(track, start, end)
+            .into_iter()
+            .map(|clip| Segment {
+                source: clip.source.map(|media| Source {
+                    path: media.path,
+                    info: WavInfo {
+                        sample_rate: media.sample_rate,
+                        channels: media.channels,
+                        bits: media.bits,
+                        frames: media.frames,
+                        encoding: if media.float {
+                            Encoding::Float
+                        } else {
+                            Encoding::Pcm
+                        },
+                    },
+                }),
+                source_start: clip.source_start,
+                frames: clip.frames,
+            })
+            .collect(),
+    )
+}
 const NAMES: [&str; 15] = [
     "fx_amplify",
     "fx_normalize",
@@ -93,10 +124,16 @@ fn parameters(effect: isize) -> &'static [Parameter] {
 enum EffectChoice {
     Native(Effect),
     Filtered(FilteredEffect, Option<usize>),
+    FastPlugs(sonitrelix_effects::fastplugs::Effect),
 }
 type Rendered = Result<(PathBuf, WavInfo), String>;
 struct Context {
     strings: serde_json::Value,
+    title: String,
+    fastplugs: Option<(
+        sonitrelix_effects::fastplugs::Plugin,
+        sonitrelix_effects::fastplugs::Effect,
+    )>,
     timeline: Timeline,
     selection_start: u64,
     voice_tracks: Vec<(usize, sonitrelix_session::Track)>,
@@ -127,7 +164,11 @@ impl Context {
     unsafe fn configure(&self, h: HWND) {
         unsafe {
             let i = SendMessageW(GetDlgItem(h, 901), 0x147, 0, 0);
-            let fields = parameters(i);
+            let fields = if self.fastplugs.is_some() {
+                &[]
+            } else {
+                parameters(i)
+            };
             for n in 0..3 {
                 let field = fields.get(n);
                 let slider_label = GetDlgItem(h, SLIDER_BASE + n as i32 * 2);
@@ -158,7 +199,12 @@ impl Context {
             for id in [916, 917] {
                 ShowWindow(GetDlgItem(h, id), if i == DUCKING { 5 } else { 0 });
             }
+            ShowWindow(
+                GetDlgItem(h, 918),
+                if self.fastplugs.is_some() { 5 } else { 0 },
+            );
             let hint = match i {
+                _ if self.fastplugs.is_some() => "fx_fastplugs_render_hint",
                 DUCKING if self.voice_tracks.is_empty() => "fx_duck_no_voice",
                 DUCKING => "fx_duck_hint",
                 13 => "fx_tempo_hint",
@@ -171,6 +217,9 @@ impl Context {
     }
     unsafe fn slider_message(&self, h: HWND, message: u32, w: usize, l: isize) -> bool {
         unsafe {
+            if self.fastplugs.is_some() {
+                return false;
+            }
             let selected = SendMessageW(GetDlgItem(h, 901), 0x147, 0, 0);
             for (n, param) in parameters(selected).iter().enumerate() {
                 let slider = GetDlgItem(h, SLIDER_BASE + n as i32 * 2 + 1);
@@ -199,6 +248,9 @@ impl Context {
     }
     unsafe fn effect(&self, h: HWND) -> Result<EffectChoice, String> {
         unsafe {
+            if let Some((_, effect)) = &self.fastplugs {
+                return Ok(EffectChoice::FastPlugs(effect.clone()));
+            }
             let selected = SendMessageW(GetDlgItem(h, 901), 0x147, 0, 0);
             let fields = parameters(selected);
             let read = |index: usize| {
@@ -316,6 +368,9 @@ impl Context {
                 .spawn(move || {
                     let result = (|| {
                         let info = match effect {
+                            EffectChoice::FastPlugs(effect) => crate::fastplugs_helper::render(
+                                effect, timeline, &path, &stop, &progress,
+                            )?,
                             EffectChoice::Native(effect) => sonitrelix_effects::render(
                                 timeline, effect, &path, &stop, &progress,
                             )?,
@@ -350,7 +405,7 @@ impl Context {
                 Ok(_) => {
                     self.receiver = Some(rx);
                     self.applying = apply;
-                    for id in [901, 917, 930, 931, 941, 943, 945, 950, 951, 952] {
+                    for id in [901, 917, 918, 930, 931, 941, 943, 945, 950, 951, 952] {
                         EnableWindow(GetDlgItem(h, id), 0);
                     }
                     self.status(h, &self.t("fx_working"));
@@ -370,7 +425,7 @@ impl Context {
                 };
                 if let Some(result) = result {
                     self.receiver = None;
-                    for id in [901, 917, 930, 931, 941, 943, 945, 950, 951, 952] {
+                    for id in [901, 917, 918, 930, 931, 941, 943, 945, 950, 951, 952] {
                         EnableWindow(GetDlgItem(h, id), 1);
                     }
                     if self.closing {
@@ -397,6 +452,7 @@ impl Context {
                                     timeline: Timeline::single(path, info)?,
                                     start_ms: 0,
                                     start_frame: None,
+                                    loop_frames: None,
                                     output_id: self.output.clone(),
                                     buffer_frames: self.buffer,
                                     paused: false,
@@ -478,6 +534,23 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
                 }
                 0x111 if w >> 16 == 0 => {
                     match w & 0xffff {
+                        918 if (*p).receiver.is_none() => {
+                            if let Some((plugin, mut effect)) = (*p).fastplugs.clone() {
+                                KillTimer(h, 1);
+                                let strings = (*p).strings.clone();
+                                if let Err(error) = super::fastplugs_ui::parameters(
+                                    h,
+                                    strings,
+                                    &plugin,
+                                    &mut effect,
+                                ) {
+                                    (*p).status(h, &error);
+                                } else {
+                                    (*p).fastplugs = Some((plugin, effect));
+                                }
+                                SetTimer(h, 1, 150, 0);
+                            }
+                        }
                         930 => (*p).start(h, false),
                         931 => (*p).start(h, true),
                         932 => {
@@ -526,7 +599,7 @@ unsafe fn open(owner: HWND, context: &mut Context) -> Result<HWND, String> {
         let h = CreateWindowExW(
             0x10000,
             class.as_ptr(),
-            wide(&context.t("effects_title")).as_ptr(),
+            wide(&context.title).as_ptr(),
             0x00c80000,
             i32::MIN,
             i32::MIN,
@@ -599,6 +672,16 @@ unsafe fn open(owner: HWND, context: &mut Context) -> Result<HWND, String> {
                 600,
                 240,
             ),
+            (
+                918,
+                "BUTTON",
+                "fx_fastplugs_parameters",
+                0x10000,
+                12,
+                80,
+                235,
+                32,
+            ),
             (919, "STATIC", "fx_status", 0, 12, 244, 600, 20),
             (
                 920,
@@ -640,13 +723,22 @@ unsafe fn open(owner: HWND, context: &mut Context) -> Result<HWND, String> {
             }
             SendMessageW(c, 0x30, GetStockObject(17) as usize, 1);
         }
-        for key in NAMES {
+        if let Some((plugin, _)) = &context.fastplugs {
             SendMessageW(
                 GetDlgItem(h, 901),
                 0x143,
                 0,
-                wide(&context.t(key)).as_ptr() as isize,
+                wide(&plugin.name).as_ptr() as isize,
             );
+        } else {
+            for key in NAMES {
+                SendMessageW(
+                    GetDlgItem(h, 901),
+                    0x143,
+                    0,
+                    wide(&context.t(key)).as_ptr() as isize,
+                );
+            }
         }
         SendMessageW(GetDlgItem(h, 901), 0x14e, 0, 0);
         let voices = GetDlgItem(h, 917);
@@ -664,46 +756,66 @@ unsafe fn open(owner: HWND, context: &mut Context) -> Result<HWND, String> {
     }
 }
 impl App {
-    pub(super) unsafe fn effects_dialog(&mut self) {
+    pub(super) fn effect_range(&self, index: usize) -> Result<(u64, u64, bool), &'static str> {
+        if self
+            .editor
+            .bracket_start
+            .is_some_and(|(track, _)| track == index)
+        {
+            return Err("fx_finish_selection");
+        }
+        let (start, end) = self.selected_range(index);
+        if end > start {
+            return Ok((start, end, true));
+        }
+        // A nonempty selection outside the track must not target the whole track.
+        if self.selection.1 > self.selection.0 {
+            return Err("fx_selection_no_audio");
+        }
+        let frames = self.project.tracks[index].frames();
+        if frames == 0 {
+            return Err("audio_no_wav");
+        }
+        Ok((0, frames, false))
+    }
+
+    pub(super) unsafe fn effects_dialog(
+        &mut self,
+        fastplugs: Option<(
+            sonitrelix_effects::fastplugs::Plugin,
+            sonitrelix_effects::fastplugs::Effect,
+        )>,
+    ) {
         unsafe {
             let Some(index) = self.selected_track() else {
                 self.status(&self.t("edit_no_track"));
                 return;
             };
+            let (a, b, selection) = match self.effect_range(index) {
+                Ok(range) => range,
+                Err(key) => {
+                    let message = self.t(key);
+                    self.status(&message);
+                    announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+                    return;
+                }
+            };
             let track = &self.project.tracks[index];
-            let (a, b) = self.selected_range(index);
-            // No range means whole track, keeping common operations short.
-            let (a, b) = if b > a { (a, b) } else { (0, track.frames()) };
-            if b <= a {
-                self.status(&self.t("audio_no_wav"));
-                return;
-            }
-            let clips = sonitrelix_editing::pieces(track, a, b);
-            let timeline = match Timeline::new(
-                track.sample_rate,
-                track.channels,
-                clips
-                    .iter()
-                    .map(|c| Segment {
-                        source: c.source.as_ref().map(|m| Source {
-                            path: m.path.clone(),
-                            info: WavInfo {
-                                sample_rate: m.sample_rate,
-                                channels: m.channels,
-                                bits: m.bits,
-                                frames: m.frames,
-                                encoding: if m.float {
-                                    Encoding::Float
-                                } else {
-                                    Encoding::Pcm
-                                },
-                            },
-                        }),
-                        source_start: c.source_start,
-                        frames: c.frames,
-                    })
-                    .collect(),
-            ) {
+            let scope = if selection {
+                self.t("fx_scope_selection")
+                    .replace(
+                        "{start}",
+                        &format_time(sonitrelix_audio_io::frames_to_ms(a, track.sample_rate)),
+                    )
+                    .replace(
+                        "{end}",
+                        &format_time(editing_ui::ceil_ms(b, track.sample_rate)),
+                    )
+            } else {
+                self.t("fx_scope_track")
+            };
+            let title = format!("{} — {} — {}", self.t("effects_title"), scope, track.name);
+            let timeline = match effect_timeline(track, a, b) {
                 Ok(t) => t,
                 Err(e) => {
                     self.error(e);
@@ -720,6 +832,8 @@ impl App {
             let focus = GetFocus();
             let mut context = Box::new(Context {
                 strings: self.strings.clone(),
+                title,
+                fastplugs,
                 timeline,
                 selection_start: a,
                 voice_tracks: self
@@ -803,7 +917,7 @@ impl App {
         b: u64,
         path: PathBuf,
         info: WavInfo,
-    ) {
+    ) -> bool {
         unsafe {
             let media = sonitrelix_session::Media {
                 path,
@@ -827,21 +941,27 @@ impl App {
                 Ok((a, b)) => {
                     if let Err(e) = candidate.validate() {
                         self.error(e);
-                        return;
+                        return false;
                     }
                     self.checkpoint();
                     self.project = candidate;
-                    self.editor.bracket_start = None;
-                    self.editor.exact_selection = Some((index, a, b));
-                    self.editor.exact_cursor = Some((index, a));
-                    self.position = sonitrelix_audio_io::frames_to_ms(a, info.sample_rate);
-                    self.selection = (self.position, editing_ui::ceil_ms(b, info.sample_rate));
+                    if self.selected_track() == Some(index) {
+                        self.editor.bracket_start = None;
+                        self.editor.exact_selection = Some((index, a, b));
+                        self.editor.exact_cursor = Some((index, a));
+                        self.position = sonitrelix_audio_io::frames_to_ms(a, info.sample_rate);
+                        self.selection = (self.position, editing_ui::ceil_ms(b, info.sample_rate));
+                    }
                     self.refresh();
                     self.sync_times();
                     self.status(&self.t("fx_applied"));
                     self.log("effect_applied");
+                    true
                 }
-                Err(e) => self.error(self.t(e)),
+                Err(e) => {
+                    self.error(self.t(e));
+                    false
+                }
             }
         }
     }
@@ -858,6 +978,8 @@ mod tests {
             for es in [false, true] {
                 let mut c = Box::new(Context {
                     strings: load_strings(es),
+                    title: "Effects".into(),
+                    fastplugs: None,
                     timeline: Timeline::new(
                         48000,
                         1,
@@ -991,6 +1113,25 @@ mod tests {
                     sonitrelix_audio_io::WavReader::open(&path).unwrap().info,
                     info
                 );
+                c.fastplugs = Some((
+                    sonitrelix_effects::fastplugs::Plugin {
+                        id: "test".into(),
+                        name: "FastPlugs test".into(),
+                        parameters: vec![],
+                    },
+                    sonitrelix_effects::fastplugs::Effect {
+                        id: "test".into(),
+                        bundle: PathBuf::new(),
+                        changes: vec![],
+                    },
+                ));
+                let h = open(null_mut(), &mut c).unwrap();
+                let button = GetDlgItem(h, 918);
+                let (name, role) = accessibility_tests::name_and_role(button);
+                assert_eq!(name, c.t("fx_fastplugs_parameters").replace('&', ""));
+                assert_eq!(role, 43);
+                assert!(matches!(c.effect(h), Ok(EffectChoice::FastPlugs(_))));
+                DestroyWindow(h);
             }
             fs::remove_dir_all(dir).unwrap();
         }

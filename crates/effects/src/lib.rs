@@ -1,4 +1,6 @@
 //! Offline, bounded-memory effects. Source timelines are immutable; results are new float WAVs.
+#[cfg(windows)]
+pub mod fastplugs;
 mod filtered;
 pub use filtered::{FilteredEffect, Sidechain, render_filtered};
 use sonitrelix_audio_io::{Timeline, TimelineReader, WavInfo, WavWriter};

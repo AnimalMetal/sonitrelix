@@ -1,4 +1,4 @@
-# Keyboard shortcuts / Atajos — 0.6.4
+# Keyboard shortcuts / Atajos — 0.6.5
 
 Audio and track commands act on the selected track when **Tracks or Clips has focus**. In text fields, ordinary typing and Ctrl+A/C/X/V/Z keep Windows text-editing behavior. Ctrl+A never selects all tracks. The clipboard stores Sonitrelix clips internally; it is not the Windows audio clipboard.
 
@@ -9,6 +9,9 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | Ctrl+I | Import audio | Importar audio |
 | Ctrl+, | Tools > Preferences | Herramientas > Preferencias |
 | F1 | User guide | Guía |
+| F3 | Start or stop looping the marked selection in the main window | Iniciar o detener la repetición de la selección en la ventana principal |
+| F9 / F11 | Jump to the previous or next named marker | Ir al marcador anterior o siguiente |
+| Ctrl+M | Name a marker at the cursor | Nombrar un marcador en el cursor |
 | Ctrl+E | Effects on selection or whole track, from Tracks/Clips | Efectos en selección o pista, desde Pistas/Fragmentos |
 | F6 / F7 | Focus transport snapshot / selection | Enfocar transporte / selección |
 | F8 | Report microphone and playback peaks and clipping | Anunciar picos de entrada y reproducción y saturación |
@@ -24,6 +27,7 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | Delete | Delete selected audio, closing the gap | Eliminar selección cerrando hueco |
 | Ctrl+T / Ctrl+Shift+T | Split at cursor / trim to selection | Dividir / conservar selección |
 | Ctrl+L | Silence selection, retaining duration | Silenciar selección conservando duración |
+| Ctrl+Shift+F | Crossfade at the join between the two clips | Aplicar un fundido cruzado en la unión de dos fragmentos |
 | Ctrl+Shift+I | Insert selection-duration silence, or 1 second | Insertar silencio de duración seleccionada, o 1 segundo |
 | Left / Right | Move cursor by small step | Mover cursor por paso pequeño |
 | Ctrl+Left / Ctrl+Right | Move cursor by large step | Mover cursor por paso grande |
@@ -42,6 +46,7 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | Ctrl+Shift+Delete | Delete track | Eliminar pista |
 | M / S / A | Toggle mute / solo / recording arm | Alternar silencio / solo / armado |
 | R | Start/finish a recording on the armed track, with audible backing tracks when available | Iniciar/finalizar una toma en la pista armada, con acompañamiento audible cuando lo haya |
+| Ctrl+Shift+R | Punch in over the selection with up to three seconds of pre-roll | Grabar sobre la selección con hasta tres segundos de reproducción previa |
 | Space | Play/stop project mix; stop recording if active | Reproducir/detener; detener grabación activa |
 | Ctrl+Space | Pause/resume playback or recording | Pausar/continuar reproducción o grabación |
 

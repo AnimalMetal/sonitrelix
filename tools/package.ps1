@@ -19,8 +19,7 @@ foreach ($name in @('LICENSE','THIRD_PARTY_NOTICES.md','README.md','CHANGELOG.md
 }
 foreach ($folder in @('docs','third-party-licenses')) {
     $to = Join-Path $program $folder
-    New-Item -ItemType Directory -Path $to | Out-Null
-    Get-ChildItem -LiteralPath (Join-Path $workspace $folder) -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $to }
+    Copy-Item -LiteralPath (Join-Path $workspace $folder) -Destination $to -Recurse
 }
 if ($FFmpegBuild) {
     $ffmpeg = (Resolve-Path -LiteralPath $FFmpegBuild).Path

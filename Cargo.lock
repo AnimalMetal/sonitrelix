@@ -13,6 +13,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfg-if"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
+name = "clap-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8506185e2773e968286c74ba5460a278e4c4604a224aef4d2a595383efd7d7c5"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -29,6 +41,16 @@ name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "libloading"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1832accd5a4ca2795ace4d05d15c4039be15b62d3b950eff99746a990e3cc10"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
 
 [[package]]
 name = "memchr"
@@ -133,32 +155,35 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sonitrelix-audio-io"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "windows",
 ]
 
 [[package]]
 name = "sonitrelix-devices"
-version = "0.6.4"
+version = "0.6.5"
 
 [[package]]
 name = "sonitrelix-editing"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "sonitrelix-session",
 ]
 
 [[package]]
 name = "sonitrelix-effects"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
+ "clap-sys",
+ "libloading",
+ "serde",
  "sonitrelix-audio-io",
 ]
 
 [[package]]
 name = "sonitrelix-engine"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "sonitrelix-audio-io",
  "sonitrelix-devices",
@@ -167,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-mixer"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "sonitrelix-audio-io",
  "sonitrelix-session",
@@ -175,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-session"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -183,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-settings"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -192,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-updater"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "openssl-sys",
  "serde",
@@ -202,8 +227,9 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-windows-ui"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
+ "serde",
  "serde_json",
  "sonitrelix-audio-io",
  "sonitrelix-devices",

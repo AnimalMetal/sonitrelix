@@ -18,12 +18,12 @@ For public releases set `CARGO_TARGET_DIR` to a directory whose absolute path co
 
 For development use cargo run --locked -p sonitrelix-windows-ui --bin Sonitrelix. Resources are embedded. A writable portable folder holds data beside the executable. Preserve imports/recordings with projects. Packaging creates a fresh allowlisted folder under dist, excludes data/private keys and includes only release vcruntime140 DLLs from the Microsoft redistributable directory under Microsoft terms. The portable marker enables EXE installation. Future runtime/asset changes require a full package.
 
-Optional hardware checks (endpoint discovery, output silence and invalid input; no microphone capture):
+Optional hardware checks use the selected Windows audio service and include brief default-microphone capture in a temporary WAV, which the test deletes.
 
 ```powershell
 cargo test -p sonitrelix-devices -p sonitrelix-engine --locked -- --ignored --nocapture
 ```
 
-Media Foundation codecs require Windows media components, including Media Feature Pack on relevant N editions. No wxPython, ASIO SDK or external codec binary is bundled. Include LICENSE, notices and dependency licenses. See docs/UPDATES.md for owner publication. Authenticode signing and an installer remain unavailable.
+Media Foundation codecs require Windows media components, including Media Feature Pack on relevant N editions. Official release ZIPs bundle FFmpeg and its notices. The basic development package can be built separately. Include LICENSE, notices and dependency licenses. See docs/UPDATES.md for owner publication. Authenticode signing and an installer remain unavailable.
 
-This environment uses cached dependencies with an unreachable proxy. On a connected machine, cargo --config net.offline=false fetch --locked can populate the cache; do not change system proxy settings.
+Use cargo fetch --locked on a connected machine to populate the Cargo cache before an offline build.

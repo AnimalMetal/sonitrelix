@@ -1,37 +1,25 @@
-> Current 0.4 additions: native Clips list, keyboard audio edits, recording arm/transport, searchable bilingual F1 help. Follow [EDITING_RECORDING.md](EDITING_RECORDING.md) for current manual tests and [SHORTCUTS.md](SHORTCUTS.md) for context-sensitive bindings. Actual NVDA/JAWS acceptance remains pending.
+# Keyboard and screen-reader acceptance
 
-# Accessibility acceptance / Pruebas de accesibilidad
+Run the current build without a mouse with NVDA and JAWS separately. Record the reader version, Windows version, app language, exact keys, expected and heard output, focus and result. The automated tests cover native names, roles, state and command behavior. A complete reader walkthrough still needs to be recorded.
 
-Status: **pending actual NVDA and JAWS tests**. Native controls are a starting point, not proof. Automated tests create native Win32 controls and verify commands, serialization, language preservation and MSAA names/roles, not reader output. Computer Use access to Sonitrelix was denied in this environment, so no UI Automation inspection result is recorded.
+1. Launch with no project. Confirm focus in Tracks and that the startup status describes the available actions. Tab and Shift+Tab through the track and clip lists, position and selection fields, transport and status. Verify native menu access with Alt and arrow keys.
+2. Create two tracks and give them recognizable names. Verify name, format and mute/solo/arm state. Press M, S and A and listen for the changed state. During playback, try Alt+Arrows in Tracks and listen for the new value and uninterrupted sound.
+3. Import an instrumental, set exact times and mark a range with [ and ]. Verify F6 transport, F7 selection and that text fields retain ordinary editing keys. Test cut, copy, paste, split, undo/redo and export. The [multitrack checklist](MULTITRACK.md) covers the full scenario.
+4. Select the microphone and headphones independently. Test **Transport > Test microphone**, F8 and Escape. Arm a voice track and record over the backing. Verify elapsed time, clipping, pause/resume, final take placement and opt-in monitoring. Try a missing input and an unplugged USB device on a disposable project.
+5. Use Ctrl+E and Ctrl+G. Verify every slider's name, value, Reset button and Tab order. Check effect Preview, Stop preview, Apply, Cancel and Undo.
+6. Save and reopen a project in a path with spaces and Unicode. Test invalid time entry and cancel each file dialog. Confirm that prompts are readable and that focus returns where expected.
+7. In Preferences, try Automatic, English and Español. Verify localized labels and unchanged position and selection. Read the [Preferences checklist](PREFERENCES.md) for device and validation checks.
+8. Open F1, Changelog, About and Licenses. Verify read-only text, section navigation, Ctrl+F/F3, Copy and focus restoration. From F1 open the HTML guide and navigate its headings and shortcut tables. In the update window check that Install, Cancel and Skip announce their results.
+9. Repeat critical actions with large text, Windows high contrast and different DPI settings. Include braille where available and run the same workflow on Windows 10 x64.
 
-For 0.3.0, use the [WAV playback manual checklist](WAV_PLAYBACK.md), especially selected-output routing, text-safe shortcuts, F6 position snapshots, seek/pause behavior, errors and physical USB disconnection. The added readout/buttons have native MSAA name checks; actual reader speech, focus behavior and visual layout still need independent verification.
+## Timeline tools
 
-For 0.2.0, start with the [Preferences-specific manual checklist](PREFERENCES.md). Tools replaces Options; language and detailed confirmation are now inside Preferences (Ctrl+Comma). New native tests query MSAA names and roles on main-window and preference controls. Those checks are API-level evidence only; reader output and independent keyboard use remain pending. Native property-sheet integration tests briefly create and hide their own dialog; no external application is automated.
+1. Mark a range with `[` and `]`, press F3 and listen through several repeats. F6 should report a position inside the range. Pause and resume with Ctrl+Space and stop with F3. Clear the range and check the F3 prompt.
+2. At two different times, use Ctrl+M to name markers. Verify that F9 and F11 report the correct names and times and that the markers survive saving and reopening the project. Test Transport > Manage markers and undo a deletion.
+3. On a copy of a two-track project, arm the track containing an existing take. Mark part of it and use Ctrl+Shift+R. Check the pre-roll and recording status, automatic stop, original audio outside the range, unchanged clip timing, and Ctrl+Z.
+4. Select the second of two adjacent audio clips in Clips and press Enter. Use Ctrl+Shift+F and check the status announcement. The later clips on this track move earlier by up to 20 ms. Undo and verify that the old join and timing return.
+5. With speakers and microphone in a quiet room or a wired loopback, open Tools > Calibrate recording offset. Confirm once, listen for the result dialog and verify that accepting saves the displayed value. Test Escape and a disconnected audio path. Neither should change the manual setting.
 
-Run every step without a mouse, once in English and once in Spanish, separately with current NVDA and JAWS on Windows 11. Repeat critical cases on Windows 10. Record Windows/reader version, expected and actual speech/braille, focus, outcome and evidence. A serious failure blocks release.
+## Español
 
-1. Launch Sonitrelix. Initial focus should be the empty Tracks list. NVDA+Tab or the JAWS focus command must identify the list and its name.
-2. Tab through Tracks, Track name, Add track, Position, Selection start, Selection end, Apply times, Status. Reverse with Shift+Tab. Verify names, roles, values, focus visibility and read-only Status. Alt mnemonics should reach each intended control without collisions.
-3. Enter `Vocals ñ` in Track name; activate Add track by keyboard. Focus should return to the selected row. Confirm the full name and mute/solo/arm state are available. Create a second track and use arrows between rows.
-4. Through Track menu, toggle mute, solo and arm. These flags are storage only in this build; ensure that limitation is announced in the arm label. Re-read the row to verify current state; check spontaneous duplicate announcements and stale focus. Rename using the name field, then delete a test track; verify focus goes to the remaining row. Never perform this with valuable real projects.
-5. From the list, Ctrl+Z/Y undo/redo the last track change. In a text field Ctrl+Z must remain local text undo. Ctrl+X/C/V/A must retain normal text editing and typing `R` or Space must not start transport.
-6. Enter `00:01:15.000`, start `00:00:12.000`, end `00:00:18.000`; Apply times. Tab to Status and confirm the exact position, selection and 6000 ms duration. Disable detailed time confirmation through Tools > Preferences > Accessibility; repeat and verify shorter Status. Neither setting replaces native names/values.
-7. Enter an invalid minute (`00:60:00.000`) or end before start. Apply. The native error must be readable, Enter/Escape close it, and focus must return to Position for correction. Improve focus to the precise failing field before a public editor release.
-8. Ctrl+S opens the Windows Save dialog. Give a path with spaces and Unicode. Save, change a track, Ctrl+Shift+S to another path. Ctrl+O reopens the first project; verify independent contents. Cancel dialogs; focus should return to the initiating control. Try malformed/future JSON and an unwritable location; ensure current project survives and errors are readable.
-9. With edits pending, Ctrl+N and Alt+F4 show Yes/No/Cancel using system language. Cancel must retain data and focus; Yes must save successfully before proceeding; canceling that Save dialog must retain the project.
-10. Change Tools > Preferences > General to Español with a track and typed times. Confirm translated menus and labels, preservation of values, and useful focus. Restart and confirm persistence. Windows common-dialog buttons follow OS language.
-11. F1 opens the native guide; verify all content can be read. Close and verify focus retention. Long text in a message box and lack of search are known limitations; replace with a read-only searchable viewer if readers cannot navigate it.
-12. Test 100%, 150%, 200% scaling, system text-size changes, Windows high contrast, minimum size and maximize. No clipped labels, hidden controls or loss of focus. Check screen-reader braille output and native selection indication.
-
-## Later milestones — not executable in 0.1
-
-For playback: open fixture WAV/MP3/FLAC, play/stop/seek while traversing controls; verify audible timing and queryable position without speech flooding. For editing: numeric selection/split/cut/paste/trim, source hashes unchanged, undo/redo and reopen. For recording: select USB microphone and headphones independently; disconnect capture while recording and preserve completed data. For multitrack acceptance: import instrumental, create/arm Vocals, record while backing plays, compensate offset, edit/process vocals independently, mix/export and reopen/check output. For effects: every numerical parameter, preview, apply, cancel and undo must be usable by keyboard. Mark all these pending until implemented and actually tested.
-
-## Español: registro mínimo por caso
-
-Anote lector y versión, Windows y versión, idioma, pasos exactos, resultado esperado, resultado observado, foco final y estado aprobado/fallido/pendiente. Una prueba automática no equivale a «probado con NVDA/JAWS». El flujo de grabación de voz sobre música sigue pendiente.
-
-
-## Help text acceptance check
-
-Open Help > User guide, Changelog and About, in English and Spanish. Each must focus a named read-only text control, not a button. Arrow through lines, select with Shift+arrows or Ctrl+A, copy with Ctrl+C, and verify typing cannot change the text. Use Ctrl+F/F3 to search, section navigation, and Escape to return to the original main control. Repeat with NVDA and JAWS; verify text/read-only role, content and focus announcements. Automated checks verify the native text role, read-only style, input rejection, translated labels and menu commands; real screen-reader confirmation is still pending.
+Realice la prueba sin ratón con NVDA y JAWS por separado. Importe música, grabe voz en otra pista, consulte posición y niveles, aplique un efecto y exporte la mezcla. Anote las versiones, el idioma, las teclas, lo anunciado, el foco y el resultado. Consulte la [guía en español](user-guide.es.html) para los pasos y atajos.

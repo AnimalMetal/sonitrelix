@@ -2,7 +2,7 @@ use super::{
     Command, Event, PlayRequest, Progress, State,
     ring::{self, Consumer},
 };
-use sonitrelix_audio_io::{TimelineReader, ms_to_frames};
+use sonitrelix_audio_io::TimelineReader;
 use std::{
     io,
     sync::{
@@ -308,10 +308,7 @@ fn start(
     wake: Arc<Signal>,
 ) -> std::result::Result<Session, String> {
     let mut reader = TimelineReader::new(request.timeline.clone());
-    let start = request
-        .start_frame
-        .unwrap_or_else(|| ms_to_frames(request.start_ms, reader.info().sample_rate))
-        .min(reader.info().frames);
+    let start = request.first_frame();
     reader.seek_frame(start).map_err(|e| e.to_string())?;
     progress
         .rate
@@ -341,17 +338,28 @@ fn start(
         failed: AtomicBool::new(false),
     });
     let c = control.clone();
+    let repeat = request.loop_frames.clone();
     let decoder = thread::Builder::new()
         .name("wav-stream-reader".into())
         .spawn(move || {
             let _completion = DecoderCompletion(c.clone());
             let result = (|| {
                 let mut block = vec![0f32; block_frames * channels];
+                let mut frame = start;
                 while !c.cancelled() {
-                    let frames = reader.read_frames(&mut block)?;
+                    let mut limit = block_frames;
+                    if let Some(range) = &repeat {
+                        if frame == range.end {
+                            reader.seek_frame(range.start)?;
+                            frame = range.start;
+                        }
+                        limit = (range.end - frame).min(limit as u64) as usize;
+                    }
+                    let frames = reader.read_frames(&mut block[..limit * channels])?;
                     if frames == 0 {
                         break;
                     }
+                    frame += frames as u64;
                     let n = frames * channels;
                     let mut offset = 0;
                     while offset < n && !c.cancelled() {
@@ -454,10 +462,14 @@ unsafe fn render(
                 stream.client.GetCurrentPadding(),
                 "Read output position (device may be disconnected)",
             )?;
-            progress.frame.store(
-                start + submitted.saturating_sub(u64::from(padding)),
-                Ordering::Release,
-            );
+            let played = submitted.saturating_sub(u64::from(padding));
+            let position = request
+                .loop_frames
+                .as_ref()
+                .map_or(start + played, |range| {
+                    range.start + played % (range.end - range.start)
+                });
+            progress.frame.store(position, Ordering::Release);
             if !paused {
                 let available = stream
                     .capacity
@@ -568,15 +580,9 @@ pub(super) fn coordinate(
                 progress
                     .total
                     .store(request.timeline.info().frames, Ordering::Release);
-                progress.frame.store(
-                    request
-                        .start_frame
-                        .unwrap_or_else(|| {
-                            ms_to_frames(request.start_ms, request.timeline.info().sample_rate)
-                        })
-                        .min(request.timeline.info().frames),
-                    Ordering::Release,
-                );
+                progress
+                    .frame
+                    .store(request.first_frame(), Ordering::Release);
                 progress.id.store(id, Ordering::Release);
                 match start(
                     id,

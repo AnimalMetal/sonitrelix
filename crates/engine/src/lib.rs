@@ -1,4 +1,6 @@
 //! Streaming selected-file transport. Disk decoding and WASAPI rendering are separate.
+#[cfg(windows)]
+pub mod calibration;
 mod gate;
 mod meter;
 #[cfg(windows)]
@@ -47,9 +49,25 @@ pub struct PlayRequest {
     pub timeline: Timeline,
     pub start_ms: u64,
     pub start_frame: Option<u64>,
+    pub loop_frames: Option<std::ops::Range<u64>>,
     pub output_id: String,
     pub buffer_frames: u32,
     pub paused: bool,
+}
+impl PlayRequest {
+    fn first_frame(&self) -> u64 {
+        let info = self.timeline.info();
+        self.loop_frames.as_ref().map_or_else(
+            || {
+                self.start_frame
+                    .unwrap_or_else(|| {
+                        sonitrelix_audio_io::ms_to_frames(self.start_ms, info.sample_rate)
+                    })
+                    .min(info.frames)
+            },
+            |range| range.start,
+        )
+    }
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Snapshot {
@@ -174,6 +192,14 @@ impl Engine {
         }
     }
     pub fn play(&mut self, request: PlayRequest) -> io::Result<u64> {
+        if request.loop_frames.as_ref().is_some_and(|range| {
+            range.start >= range.end || range.end > request.timeline.info().frames
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid loop range",
+            ));
+        }
         if self.closing {
             return Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
@@ -302,6 +328,7 @@ mod tests {
             timeline,
             start_ms: 0,
             start_frame: None,
+            loop_frames: None,
             output_id: device.id.clone(),
             buffer_frames: 256,
             paused: false,
@@ -344,6 +371,28 @@ mod tests {
         let id = engine.play(request.clone()).unwrap();
         let end = wait(&engine, id, |s| s.state == State::Ended);
         assert_eq!(end.frame, expected.frames);
+        let range = 52920..57330;
+        request.loop_frames = Some(range.clone());
+        let id = engine.play(request.clone()).unwrap();
+        wait(&engine, id, |s| s.state == State::Playing);
+        let repeat_deadline = Instant::now() + Duration::from_millis(420);
+        let mut previous = engine.snapshot().frame;
+        let mut wraps = 0;
+        while Instant::now() < repeat_deadline {
+            let snapshot = engine.snapshot();
+            assert!(range.contains(&snapshot.frame), "{snapshot:?}");
+            assert_eq!(snapshot.underruns, 0);
+            if snapshot.frame < previous {
+                wraps += 1;
+            }
+            previous = snapshot.frame;
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            wraps >= 3,
+            "audio should stay active across repeated loop boundaries"
+        );
+        request.loop_frames = None;
         request.output_id = "sonitrelix-nonexistent-endpoint".into();
         let id = engine.play(request.clone()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);

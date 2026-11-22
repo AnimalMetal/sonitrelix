@@ -172,7 +172,14 @@ impl Store {
             last_good: None,
         };
         match fs::read(&store.path) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                // A missing primary can still have a valid backup from a previous save.
+                if !store.recover_backup() && store.backup_path().exists() {
+                    store
+                        .warnings
+                        .push("The preferences backup could not be read.".into());
+                }
+            }
             Err(e) => {
                 store.writable = false;
                 store
@@ -208,21 +215,10 @@ impl Store {
                     store.warnings.push(
                         "Damaged preferences were detected; a retained copy was attempted.".into(),
                     );
-                    match fs::read(store.backup_path())
-                        .ok()
-                        .and_then(|b| decode(&b).ok().map(|(s, w)| (b, s, w)))
-                    {
-                        Some((b, s, w)) => {
-                            store.settings = s;
-                            store.last_good = Some(b);
-                            store.warnings.extend(w);
-                            store
-                                .warnings
-                                .push("Restored the previous settings backup.".into());
-                        }
-                        None => store
+                    if !store.recover_backup() {
+                        store
                             .warnings
-                            .push("Using default preferences; no usable backup was found.".into()),
+                            .push("Using default preferences; no usable backup was found.".into());
                     }
                 }
             },
@@ -231,6 +227,23 @@ impl Store {
     }
     pub fn backup_path(&self) -> PathBuf {
         self.path.with_extension("json.bak")
+    }
+    pub fn has_saved_settings(&self) -> bool {
+        self.last_good.is_some()
+    }
+    fn recover_backup(&mut self) -> bool {
+        let Ok(bytes) = fs::read(self.backup_path()) else {
+            return false;
+        };
+        let Ok((settings, warnings)) = decode(&bytes) else {
+            return false;
+        };
+        self.settings = settings;
+        self.last_good = Some(bytes);
+        self.warnings.extend(warnings);
+        self.warnings
+            .push("Restored the previous settings backup.".into());
+        true
     }
     pub fn can_save(&self) -> bool {
         self.writable
@@ -447,11 +460,22 @@ mod tests {
         let dir = dir("recovery");
         let p = dir.join("preferences.json");
         let mut store = Store::load(&p);
-        let first = Settings::default();
+        let mut first = Settings::default();
+        first.editing.step_ms = 24;
         store.save(first.clone()).unwrap();
         let mut second = first.clone();
         second.general.language = "es".into();
         store.save(second).unwrap();
+        fs::remove_file(&p).unwrap();
+        let missing_primary = Store::load(&p);
+        assert_eq!(missing_primary.settings, first);
+        assert!(missing_primary.has_saved_settings());
+        assert!(
+            missing_primary
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("backup"))
+        );
         fs::write(&p, b"{broken").unwrap();
         let restored = Store::load(&p);
         assert_eq!(restored.settings, first);

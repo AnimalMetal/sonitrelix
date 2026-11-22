@@ -535,7 +535,10 @@ impl Context {
                 return Ok(());
             }
             let next = self.read_all()?;
-            if next == self.store.settings && self.store.warnings.is_empty() {
+            if next == self.store.settings
+                && self.store.has_saved_settings()
+                && self.store.warnings.is_empty()
+            {
                 self.close_after_save = close;
                 self.allow_close = close;
                 if close {
@@ -612,6 +615,11 @@ impl Context {
                                     self.populate(index);
                                 }
                                 self.set_status("pref_saved", "");
+                                let page = SendMessageW(self.sheet, 0x400 + 118, 0, 0) as HWND;
+                                super::announcement::announce(
+                                    GetDlgItem(page, STATUS),
+                                    &self.t("pref_saved"),
+                                );
                                 PostMessageW(self.owner, SETTINGS_APPLIED, 0, 0);
                                 for page in self.pages {
                                     SendMessageW(self.sheet, PSM_UNCHANGED, page as usize, 0);
@@ -1124,6 +1132,11 @@ mod tests {
             assert_eq!(Store::load(&path).settings.editing.step_ms, 25);
             let second = Dialog::create(owner, Store::load(&path), false).unwrap();
             ShowWindow(second.hwnd, 0);
+            assert_eq!(selected(second.context.pages[0], 1001), 2);
+            assert_eq!(selected(second.context.pages[0], 1002), 4);
+            assert_eq!(text(second.context.pages[2], 3003), "-25");
+            assert_eq!(text(second.context.pages[3], 4001), "25");
+            assert_eq!(text(second.context.pages[3], 4002), "2500");
             set(second.context.pages[3], 4001, "40");
             SendMessageW(second.hwnd, 0x400 + 113, 5, 0);
             assert!(second.closed());
@@ -1143,6 +1156,17 @@ mod tests {
             assert!(third.closed());
             drop(third);
             assert_eq!(Store::load(&path).settings.editing.step_ms, 50);
+            let first_run = dir.join("first-run.json");
+            let mut fresh = Dialog::create(owner, Store::load(&first_run), false).unwrap();
+            ShowWindow(fresh.hwnd, 0);
+            SendMessageW(fresh.hwnd, 0x400 + 113, 3, 0);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while fresh.context.saving.is_some() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+                fresh.context.poll();
+            }
+            assert!(Store::load(&first_run).has_saved_settings());
+            drop(fresh);
             DestroyWindow(owner);
             fs::remove_dir_all(dir).unwrap();
         }

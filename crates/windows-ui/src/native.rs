@@ -11,6 +11,8 @@ mod editing_ui;
 mod effects_ui;
 #[path = "export_ui.rs"]
 mod export_ui;
+#[path = "fastplugs_ui.rs"]
+mod fastplugs_ui;
 #[path = "forms.rs"]
 mod forms;
 #[path = "help.rs"]
@@ -29,12 +31,14 @@ mod shortcut_config;
 mod shortcuts;
 #[path = "slider.rs"]
 mod slider;
+#[path = "timeline_tools.rs"]
+mod timeline_tools;
 #[path = "updates.rs"]
 mod updates;
 #[path = "win32.rs"]
 mod w;
 use editing_ui::*;
-use playback::{END, IMPORT, PAUSE, PLAY, REPORT, REPORT_LEVELS, START, STOP};
+use playback::{END, IMPORT, LOOP_SELECTION, PAUSE, PLAY, REPORT, REPORT_LEVELS, START, STOP};
 use sonitrelix_session::{Project, parse_time};
 use sonitrelix_settings::Store;
 use std::{
@@ -97,6 +101,9 @@ struct App {
     updates: updates::Checker,
     exporter: export_ui::Exporter,
     maintenance: maintenance::Maintenance,
+    timeline_job: Option<timeline_tools::Job>,
+    fastplugs_scan: Option<fastplugs_ui::Scan>,
+    fastplugs_bundle: Option<PathBuf>,
 }
 impl App {
     fn t(&self, key: &str) -> String {
@@ -250,6 +257,7 @@ impl App {
                         ("trim", TRIM),
                         ("silence", SILENCE),
                         ("insert_silence", INSERT_SILENCE),
+                        ("crossfade_menu", timeline_tools::CROSSFADE),
                         ("read_selection", READ_SELECTION),
                         ("selection_mark_start_menu", MARK_START),
                         ("selection_mark_end_menu", MARK_END),
@@ -280,12 +288,30 @@ impl App {
                         ("go_end", END),
                         ("report_position", REPORT),
                         ("report_levels", REPORT_LEVELS),
+                        ("loop_menu", LOOP_SELECTION),
+                        ("marker_add_menu", timeline_tools::ADD_MARKER),
+                        ("marker_previous_menu", timeline_tools::PREVIOUS_MARKER),
+                        ("marker_next_menu", timeline_tools::NEXT_MARKER),
+                        ("marker_manage", timeline_tools::MANAGE_MARKERS),
                         ("microphone_check", recording_ui::CHECK_MICROPHONE),
                         ("record", recording_ui::RECORD),
+                        ("punch_menu", recording_ui::PUNCH),
                     ],
                 ),
-                ("tools", vec![("preferences", PREFERENCES)]),
-                ("effects_menu", vec![("effects_open", effects_ui::EFFECTS)]),
+                (
+                    "tools",
+                    vec![
+                        ("preferences", PREFERENCES),
+                        ("calibrate_menu", timeline_tools::CALIBRATE),
+                    ],
+                ),
+                (
+                    "effects_menu",
+                    vec![
+                        ("effects_open", effects_ui::EFFECTS),
+                        ("fx_fastplugs_menu", fastplugs_ui::OPEN),
+                    ],
+                ),
                 (
                     "help_menu",
                     vec![
@@ -513,12 +539,18 @@ impl App {
         use std::os::windows::ffi::OsStringExt;
         unsafe {
             let mut b = vec![0u16; 32768];
-            if !audio && let Some(p) = &self.path {
+            let plugin = title_key == Some("fx_fastplugs_open");
+            if !plugin
+                && !audio
+                && let Some(p) = &self.path
+            {
                 let s: Vec<_> = p.as_os_str().to_string_lossy().encode_utf16().collect();
                 let n = s.len().min(b.len() - 1);
                 b[..n].copy_from_slice(&s[..n]);
             }
-            let filter = wide(if audio {
+            let filter = wide(if plugin {
+                "CLAP (*.clap)\0*.clap\0\0"
+            } else if audio {
                 if save {
                     "WAV (*.wav)\0*.wav\0FLAC (*.flac)\0*.flac\0MP3 (*.mp3)\0*.mp3\0AAC / M4A (*.m4a)\0*.m4a\0Opus (*.opus)\0*.opus\0\0"
                 } else {
@@ -527,7 +559,13 @@ impl App {
             } else {
                 "Sonitrelix (*.sonitrelix)\0*.sonitrelix\0\0"
             });
-            let ext = wide(if audio { "wav" } else { "sonitrelix" });
+            let ext = wide(if plugin {
+                "clap"
+            } else if audio {
+                "wav"
+            } else {
+                "sonitrelix"
+            });
             let title = wide(
                 &self
                     .t(title_key.unwrap_or(if audio {
@@ -629,9 +667,20 @@ impl App {
             if self.playback.closing {
                 return;
             }
+            if self.timeline_job.is_some()
+                && ![EXIT, HELP, ABOUT, CHANGELOG, LICENSES].contains(&id)
+            {
+                if id == STOP {
+                    self.cancel_timeline_job();
+                } else {
+                    self.timeline_feedback(&self.t("timeline_busy"));
+                }
+                return;
+            }
             if self.recording.is_some()
                 && ![
                     recording_ui::RECORD,
+                    recording_ui::PUNCH,
                     STOP,
                     PAUSE,
                     REPORT,
@@ -662,13 +711,23 @@ impl App {
                 LEVELS => self.track_levels(),
                 VOLUME_UP | VOLUME_DOWN | PAN_LEFT | PAN_RIGHT => self.nudge_track_levels(id),
                 updates::CHECK => self.check_updates(),
-                effects_ui::EFFECTS => self.effects_dialog(),
+                effects_ui::EFFECTS => self.effects_dialog(None),
+                fastplugs_ui::OPEN => self.open_fastplugs(),
                 recording_ui::RECORD => self.record_command(),
+                recording_ui::PUNCH => self.start_recording(true),
                 recording_ui::CHECK_MICROPHONE => self.toggle_microphone_check(),
                 COPY | CUT | PASTE | DELETE_AUDIO | SELECT_ALL | SPLIT | TRIM | SILENCE
                 | INSERT_SILENCE | ADD_EMPTY | DUPLICATE | MOVE_UP | MOVE_DOWN | RENAME_FOCUS
                 | MARK_START | MARK_END | CLEAR_SELECTION | READ_SELECTION => self.edit_command(id),
-                IMPORT | PLAY | PAUSE | STOP | START | END | REPORT => self.audio_command(id),
+                IMPORT | PLAY | PAUSE | STOP | START | END | REPORT | LOOP_SELECTION => {
+                    self.audio_command(id)
+                }
+                timeline_tools::ADD_MARKER
+                | timeline_tools::PREVIOUS_MARKER
+                | timeline_tools::NEXT_MARKER
+                | timeline_tools::MANAGE_MARKERS => self.marker_command(id),
+                timeline_tools::CALIBRATE => self.calibrate_command(),
+                timeline_tools::CROSSFADE => self.crossfade_command(),
                 REPORT_LEVELS => self.report_levels(),
                 NEW => {
                     if self.can_close() {
@@ -793,6 +852,17 @@ impl App {
                         }
                         self.dirty = true;
                         self.restore_history(p);
+                        self.timeline_feedback(&self.t(if id == UNDO {
+                            "edit_undone"
+                        } else {
+                            "edit_redone"
+                        }));
+                    } else {
+                        self.timeline_feedback(&self.t(if id == UNDO {
+                            "edit_nothing_to_undo"
+                        } else {
+                            "edit_nothing_to_redo"
+                        }));
                     }
                 }
                 PREFERENCES => {
@@ -816,6 +886,9 @@ impl App {
                             self.selection_anchor = None;
                             self.editor.exact_selection = None;
                             self.editor.exact_cursor = None;
+                            if e > s {
+                                self.editor.bracket_start = None;
+                            }
                             self.status(&if self.verbose {
                                 format!(
                                     "{} {}. {} {} — {} ({} ms)",
@@ -1099,7 +1172,9 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
                     }
                     if w & 0xffff == 25
                         && (w >> 16 == 1
-                            || (w >> 16 == 4 && (*ptr).selection.0 == (*ptr).selection.1))
+                            || (w >> 16 == 4
+                                && (*ptr).editor.bracket_start.is_none()
+                                && (*ptr).selection.0 == (*ptr).selection.1))
                     {
                         (*ptr).clip_selected();
                         return 0;
@@ -1179,6 +1254,9 @@ pub fn run() {
             help: None,
             updates: Default::default(),
             exporter: Default::default(),
+            timeline_job: None,
+            fastplugs_scan: None,
+            fastplugs_bundle: None,
         });
         let class = wide("SonitrelixMain");
         let instance = GetModuleHandleW(null());
@@ -1309,6 +1387,9 @@ pub fn run() {
                 let shift = GetKeyState(0x10) < 0;
                 let alt = GetKeyState(0x12) < 0;
                 let focus = GetFocus();
+                if msg.wParam == 0x1b && !ctrl && !shift && !alt && app.cancel_timeline_job() {
+                    continue;
+                }
                 if msg.wParam == 0x1b && app.exporter.pending() {
                     app.exporter.cancel();
                     app.status(&app.t("export_cancelling"));
@@ -1548,12 +1629,8 @@ mod tests {
         assert_eq!(std::mem::size_of::<WNDCLASSW>(), 72);
         assert_eq!(std::mem::size_of::<MSG>(), 48);
     }
-    #[test]
-    fn native_controls_track_commands_and_preferences() {
-        // Real Win32 controls in a hidden test window; this is not a screen-reader test.
+    pub(super) unsafe fn native_test_app(data: &std::path::Path, class_name: &str) -> Box<App> {
         unsafe {
-            let data = std::env::temp_dir().join(format!("sonitrelix-ui-{}", std::process::id()));
-            fs::create_dir_all(&data).unwrap();
             let mut app = Box::new(App {
                 hwnd: null_mut(),
                 project: Project::default(),
@@ -1566,8 +1643,8 @@ mod tests {
                 strings: load_strings(false),
                 es: false,
                 verbose: true,
-                data: data.clone(),
-                maintenance: maintenance::Maintenance::new(&data),
+                data: data.to_path_buf(),
+                maintenance: maintenance::Maintenance::new(data),
                 controls: vec![],
                 position: 0,
                 selection: (0, 0),
@@ -1582,9 +1659,12 @@ mod tests {
                 help: None,
                 updates: Default::default(),
                 exporter: Default::default(),
+                timeline_job: None,
+                fastplugs_scan: None,
+                fastplugs_bundle: None,
             });
             let instance = GetModuleHandleW(null());
-            let class = wide("SonitrelixNativeTest");
+            let class = wide(class_name);
             let wc = WNDCLASSW {
                 style: 0,
                 proc: Some(proc),
@@ -1615,6 +1695,16 @@ mod tests {
             assert!(!app.hwnd.is_null());
             SetWindowLongPtrW(app.hwnd, -21, (&mut *app as *mut App) as isize);
             app.build();
+            app
+        }
+    }
+    #[test]
+    fn native_controls_track_commands_and_preferences() {
+        // Real Win32 controls in a hidden test window; this is not a screen-reader test.
+        unsafe {
+            let data = std::env::temp_dir().join(format!("sonitrelix-ui-{}", std::process::id()));
+            fs::create_dir_all(&data).unwrap();
+            let mut app = native_test_app(&data, "SonitrelixNativeTest");
             assert!(app.controls.iter().all(|c| !c.is_null()));
             for id in [
                 11,
@@ -1720,7 +1810,9 @@ mod tests {
             wav.extend_from_slice(&16u16.to_le_bytes());
             wav.extend_from_slice(b"data");
             wav.extend_from_slice(&2000u32.to_le_bytes());
-            wav.resize(2044, 0);
+            for _ in 0..1000 {
+                wav.extend_from_slice(&8192i16.to_le_bytes());
+            }
             fs::write(&source, &wav).unwrap();
             app.import_wav(source.clone());
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -1732,15 +1824,25 @@ mod tests {
             assert_eq!(app.project.tracks[0].frames(), 1000);
             SetFocus(GetDlgItem(app.hwnd, 11));
             app.command(SELECT_ALL);
+            assert_eq!(
+                app.text(21),
+                app.t("edit_all_selected")
+                    .replace("{track}", &app.project.tracks[0].name)
+            );
             app.command(COPY);
+            assert_eq!(app.text(21), app.t("edit_copied"));
             assert_eq!(app.editor.clipboard.as_ref().unwrap().frames(), 1000);
             app.command(CUT);
+            assert_eq!(app.text(21), app.t("edit_cut_done"));
             assert_eq!(app.project.tracks[0].frames(), 0);
             app.command(PASTE);
+            assert_eq!(app.text(21), app.t("edit_paste_done"));
             assert_eq!(app.project.tracks[0].frames(), 1000);
             app.command(UNDO);
+            assert_eq!(app.text(21), app.t("edit_undone"));
             assert_eq!(app.project.tracks[0].frames(), 0);
             app.command(REDO);
+            assert_eq!(app.text(21), app.t("edit_redone"));
             assert_eq!(app.project.tracks[0].frames(), 1000);
             sonitrelix_editing::split(&mut app.project.tracks[0], 1).unwrap();
             app.refresh_clips();
@@ -1779,10 +1881,38 @@ mod tests {
             app.command(shortcuts::bracket(b'[' as usize).unwrap());
             app.move_cursor(true, false, false);
             assert_eq!(app.editor.bracket_start, Some((0, 481)));
+            assert_eq!(app.effect_range(0), Err("fx_finish_selection"));
             app.editor.exact_cursor = Some((0, 1241));
             app.command(shortcuts::bracket(b']' as usize).unwrap());
             assert_eq!(app.selected_range(0), (481, 1241));
             assert_eq!(app.editor.bracket_start, None);
+            app.project.markers = vec![
+                sonitrelix_session::Marker {
+                    name: "Start".into(),
+                    frame: 480,
+                },
+                sonitrelix_session::Marker {
+                    name: "Chorus".into(),
+                    frame: 1440,
+                },
+            ];
+            app.command(timeline_tools::NEXT_MARKER);
+            assert_eq!(app.position, 30);
+            assert!(app.text(21).contains("Chorus"));
+            app.command(timeline_tools::PREVIOUS_MARKER);
+            assert_eq!(app.position, 10);
+            assert!(app.text(21).contains("Start"));
+            assert_eq!(app.selected_range(0), (481, 1241));
+            let (effect_start, effect_end, selected) = app.effect_range(0).unwrap();
+            assert_eq!((effect_start, effect_end, selected), (481, 1241, true));
+            let selection = app.selection;
+            let exact = app.editor.exact_selection.take();
+            app.selection = (1000, 2000);
+            assert_eq!(app.effect_range(0), Err("fx_selection_no_audio"));
+            app.selection = (0, 0);
+            assert_eq!(app.effect_range(0), Ok((0, 1480, false)));
+            app.selection = selection;
+            app.editor.exact_selection = exact;
             app.log_error("test audio export", "first line\nsecond line");
             let error_log = fs::read_to_string(data.join("error.log")).unwrap();
             assert!(error_log.contains("test audio export"));
@@ -1810,10 +1940,10 @@ mod tests {
             app.command(PASTE);
             assert_eq!(app.project.tracks[empty].sample_rate, 44100);
             assert_eq!(app.project.tracks[empty].frames(), 88200);
-            let info = sonitrelix_audio_io::WavReader::open(&source).unwrap().info;
             let rendered = data.join("rendered-effect.wav");
             let info = sonitrelix_effects::render(
-                sonitrelix_audio_io::Timeline::single(source.clone(), info).unwrap(),
+                effects_ui::effect_timeline(&app.project.tracks[0], effect_start, effect_end)
+                    .unwrap(),
                 sonitrelix_effects::Effect::Amplify(-6.),
                 &rendered,
                 &std::sync::atomic::AtomicBool::new(false),
@@ -1821,8 +1951,22 @@ mod tests {
             )
             .unwrap();
             let before = app.project.clone();
-            app.commit_effect(0, 480, 1480, rendered.clone(), info);
+            app.commit_effect(0, effect_start, effect_end, rendered.clone(), info);
             assert!(app.project.tracks[0].sources().any(|m| m.path == rendered));
+            assert_eq!(app.project.tracks[1], before.tracks[1]);
+            assert_eq!(app.project.tracks[0].gain, before.tracks[0].gain);
+            let mut samples = [0.; 1480];
+            let mixed = effects_ui::effect_timeline(&app.project.tracks[0], 0, 1480).unwrap();
+            let mut reader = sonitrelix_audio_io::TimelineReader::new(mixed);
+            assert_eq!(reader.read_frames(&mut samples).unwrap(), 1480);
+            assert_eq!(samples[480], 0.25);
+            let amplified = 0.25 * 10f32.powf(-6. / 20.);
+            assert!(
+                samples[481..1241]
+                    .iter()
+                    .all(|s| (s - amplified).abs() < 0.000001)
+            );
+            assert!(samples[1241..].iter().all(|&s| s == 0.25));
             app.command(UNDO);
             assert_eq!(app.project, before);
             app.command(REDO);

@@ -35,10 +35,15 @@ Sonitrelix original code is MIT licensed. Dependency licenses were reviewed agai
 | pkg-config | 0.3.34 | MIT OR Apache-2.0 |
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
 | vcpkg | 0.2.15 | MIT OR Apache-2.0 |
+| cfg-if | 1.0.5 | MIT OR Apache-2.0 |
+| clap-sys | 0.6.0 | MIT OR Apache-2.0 |
+| libloading | 0.9.1 | ISC |
 
 Select the MIT option where offered, retaining the Unicode-3.0 terms for unicode-ident's data. Full supplied notices are retained in `third-party-licenses/<name>-<version>/`; `inventory.json` records Cargo metadata. Some packages are build-time proc-macro dependencies; their notices are retained as well. Rebuild this inventory when Cargo.lock changes. Standard Windows system DLLs are linked through original ABI declarations, not redistributed.
 
-The Microsoft [windows-rs](https://github.com/microsoft/windows-rs) bindings are now linked for WASAPI and Windows threading. The current graph contains 31 external packages; full supplied notices and metadata were retained. The WAV reader and SPSC queue are original Sonitrelix code. CPAL, Symphonia, Hound and Rubato remain candidates, not linked dependencies; their exact graphs must be audited if added.
+The Microsoft [windows-rs](https://github.com/microsoft/windows-rs) bindings are linked for WASAPI and Windows threading. The WAV reader and SPSC queue are original Sonitrelix code.
+
+FastPlugs is a separate GPL-3.0 plug-in download from [its upstream project](https://github.com/masonasons/FastPlugs). Sonitrelix uses the CLAP ABI and loads the separately installed Windows bundle in a helper process. The Sonitrelix package contains neither FastPlugs binaries nor FastPlugs source.
 
 OpenSSL 3.6.3 is statically linked for Ed25519, SHA-256 and random bytes. Its Apache-2.0 license is retained in third-party-licenses/OpenSSL-3.6.3-LICENSE.txt; build/wrapper licenses are separate.
 

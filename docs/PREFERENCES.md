@@ -1,22 +1,19 @@
-# Additions - 0.6.0
+# Preferences / Preferencias
+
+After applying changes, restart Sonitrelix from the same folder to reuse `data/preferences.json`. Each extracted portable copy has its own `data` folder. Copy `preferences.json` into the new copy's `data` folder if you move to a separate extracted build. An in-place signed update preserves this folder. If the primary file is missing or damaged, Sonitrelix looks for `preferences.json.bak` and reports recovery when a backup is found.
 
 Tools > Preferences now has six tabs: General, Devices, Recording/playback, Editing/keyboard, Accessibility and Export. General controls daily update checks; Editing/keyboard configures track/editing shortcuts; Export selects rate, channels and MP3 bitrate. Apply saves, Cancel discards pending changes. Ctrl+Tab changes category. Microphone monitoring is optional and off by default. Use headphones when enabling it. Actual NVDA/JAWS checks remain pending.
 
-## Historical notes
-
-# Preferences / Preferencias — 0.4.0
-
-Open Tools > Preferences, or Ctrl+Comma. Options has been renamed Tools; language and accessibility settings have moved into this dialog.
-
-Five native Windows property-sheet tabs provide standard Ctrl+Tab / Ctrl+Shift+Tab category navigation. Tab/Shift+Tab traverse fields and buttons; Left/Right select tabs when the tab strip has focus. F1 or Ctrl+H opens Preferences help. Escape cancels; if a combo dropdown is open, it closes the dropdown first.
+Open Tools > Preferences, or Ctrl+Comma. The native property-sheet tabs provide standard Ctrl+Tab / Ctrl+Shift+Tab category navigation. Tab/Shift+Tab traverse fields and buttons; Left/Right select tabs when the tab strip has focus. F1 or Ctrl+H opens Preferences help. Escape cancels; if a combo dropdown is open, it closes the dropdown first.
 
 | Category | Settings | Current effect |
 | --- | --- | --- |
-| General | Automatic, English or Español, new-project sample rate, Restore defaults | Automatic follows the Windows display language. Spanish display languages use Spanish and other languages use English. Saved English and Spanish choices take priority. Apply updates the main window and dialog. Rate affects new projects, not existing ones. Defaults reset all known choices in the dialog; Apply is still required. |
+| General | Automatic, English or Español, new-project sample rate, automatic update checks, Restore defaults | Automatic follows the Windows display language. Spanish display languages use Spanish and other languages use English. Saved English and Spanish choices take priority. Apply updates the main window and dialog. Rate affects new projects, not existing ones. Defaults reset all known choices in the dialog; Apply is still required. |
 | Audio devices | Independent input/output, follow Windows multimedia default, Refresh | Lists endpoints in a worker and remembers IDs. Play opens the selected output; the default is resolved at each Play. Unavailable saved outputs fail without fallback. Record opens the selected input; unavailable saved inputs fail without fallback. Preferences itself opens no stream. |
 | Recording / playback | Mono/stereo, buffer frames, manual offset, monitoring | Buffer size is requested by playback/capture; Windows may enlarge it. Channels and signed offset apply to the next capture. Monitoring uses the chosen output at a reduced listening level and leaves the recording level alone. Transport > Test microphone checks the selected input without saving a take. |
-| Editing / keyboard | Small/large cursor steps, shortcut reference | Left/Right in the main track list move by the small step; Ctrl uses the large step; Shift extends selection from its anchor. Text fields retain their own keys. Shortcut remapping is still pending. |
-| Accessibility | Detailed time confirmation, focus Status after Apply times | Changes main-window confirmation detail and optional focus immediately after successful saving. It never disables native control names/values. |
+| Editing / keyboard | Small/large cursor steps, Keyboard shortcuts | Left/Right move by the small step, Ctrl uses the large step and Shift extends the selection. Edit the available bindings under Keyboard shortcuts. |
+| Accessibility | Detailed time confirmation, focus Status after Apply times | Changes confirmation detail and optional focus. Native accessible names and values remain available. |
+| Export | Sample rate, channels, MP3 bitrate | These settings apply to the next export. |
 
 Apply validates all tabs, saves on a background thread, then updates the application without closing. OK follows the same path and closes only after success. Cancel/window close/Escape discard changes since the last successful Apply; they do not undo an earlier Apply. While saving, editing and closing are temporarily disabled until the result is known. A save error leaves the previous preferences active and the dialog open, with the error in its focusable Status fields. Device discovery and file writes do not run in an audio callback or on the UI thread.
 
@@ -41,6 +38,6 @@ Settings remain at the existing portable path, `data/preferences.json` beside th
 
 ## Español
 
-Abra Herramientas > Preferencias con Ctrl+Coma. Ctrl+Tab cambia de categoría, Tab recorre ajustes y botones, Aplicar guarda sin cerrar y Aceptar guarda y cierra. Cancelar descarta únicamente lo que no se haya aplicado. Las pestañas son General, Dispositivos de audio, Grabación/reproducción, Edición/teclado y Accesibilidad. La salida y el búfer se usan para escuchar WAV; cambiarlos detiene la escucha actual. Entrada, canales y desplazamiento se usan para la siguiente captura independiente. Aún no hay monitorización ni grabación sobre música.
+Abra Herramientas > Preferencias con Ctrl+Coma. Ctrl+Tab cambia de categoría, Tab recorre ajustes y botones, Aplicar guarda sin cerrar y Aceptar guarda y cierra. Cancelar descarta únicamente lo que no se haya aplicado. Las pestañas son General, Dispositivos de audio, Grabación/reproducción, Edición/teclado, Accesibilidad y Exportación. General permite elegir idioma Automático, English o Español. Cambiar la salida o el búfer detiene la reproducción actual. Los ajustes de entrada, canales y desplazamiento sirven para la siguiente toma. La grabación puede reproducir el acompañamiento. Active la monitorización solo si usa auriculares.
 
 Pruebe la lectura de etiquetas, valores y estados con su lector, la conservación de entrada/salida al reabrir, el cambio de idioma, valores inválidos, Cancelar/Aplicar, el retorno del foco y los pasos de cursor. La validación automática de MSAA no sustituye estas pruebas reales.

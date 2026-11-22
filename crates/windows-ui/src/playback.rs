@@ -11,6 +11,7 @@ pub(super) const START: usize = 704;
 pub(super) const END: usize = 705;
 pub(super) const REPORT: usize = 706;
 pub(super) const REPORT_LEVELS: usize = 707;
+pub(super) const LOOP_SELECTION: usize = 708;
 pub(super) const TIMER: usize = 77;
 type ImportResult = Result<(Media, String, PathBuf), String>;
 pub(super) struct Playback {
@@ -24,6 +25,7 @@ pub(super) struct Playback {
     id: u64,
     pub(super) state: State,
     paused: bool,
+    looping: bool,
     pub closing: bool,
 }
 impl Default for Playback {
@@ -39,6 +41,7 @@ impl Default for Playback {
             id: 0,
             state: State::Stopped,
             paused: false,
+            looping: false,
             closing: false,
         }
     }
@@ -166,7 +169,12 @@ impl App {
             }
         }
     }
-    unsafe fn start_playback(&mut self, index: usize, paused: bool) {
+    unsafe fn start_playback(
+        &mut self,
+        index: usize,
+        paused: bool,
+        repeat: Option<std::ops::Range<u64>>,
+    ) {
         unsafe {
             let (timeline, controls) = match sonitrelix_mixer::live_project(&self.project) {
                 Ok((t, controls)) if t.info().frames > 0 => (t, controls),
@@ -188,6 +196,7 @@ impl App {
                     }
                 }
             }
+            let looping = repeat.is_some();
             let request =
                 PlayRequest {
                     gate: None,
@@ -200,6 +209,7 @@ impl App {
                                 as u64
                         },
                     ),
+                    loop_frames: repeat,
                     output_id: self.store.settings.devices.output_id.clone(),
                     buffer_frames: self.store.settings.recording.buffer_frames,
                     paused,
@@ -217,7 +227,12 @@ impl App {
                     self.playback.active = Some(index);
                     self.playback.state = State::Starting;
                     self.playback.paused = paused;
-                    self.status(&self.t("audio_starting"));
+                    self.playback.looping = looping;
+                    self.status(&self.t(if looping {
+                        "loop_started"
+                    } else {
+                        "audio_starting"
+                    }));
                 }
                 Err(e) => self.error(e),
             }
@@ -251,6 +266,7 @@ impl App {
             self.playback.state = State::Stopped;
             self.playback.mix_controls = None;
             self.playback.paused = false;
+            self.playback.looping = false;
             self.playback.id = 0;
         }
     }
@@ -314,6 +330,10 @@ impl App {
     }
     pub(super) unsafe fn toggle_playback(&mut self) {
         unsafe {
+            if self.timeline_job.is_some() {
+                self.timeline_feedback(&self.t("timeline_busy"));
+                return;
+            }
             if self.recording.is_some() {
                 self.stop_recording();
                 return;
@@ -335,9 +355,10 @@ impl App {
             if matches!(
                 self.playback.state,
                 State::Starting | State::Playing | State::Buffering | State::Paused
-            ) && let Some(index) = self.playback.active
+            ) && self.timeline_job.is_none()
+                && let Some(index) = self.playback.active
             {
-                self.start_playback(index, self.playback.paused);
+                self.start_playback(index, self.playback.paused, None);
             }
         }
     }
@@ -352,6 +373,8 @@ impl App {
                 return;
             }
             self.playback.closing = true;
+            self.fastplugs_scan = None;
+            self.cancel_timeline_job();
             self.microphone_check = None;
             self.maintenance.clear();
             self.poll_maintenance();
@@ -366,6 +389,7 @@ impl App {
             } else if !self.exporter.pending()
                 && !self.maintenance.pending()
                 && !self.updates.pending()
+                && self.timeline_job.is_none()
                 && self.playback.import.is_none()
             {
                 DestroyWindow(self.hwnd);
@@ -415,9 +439,37 @@ impl App {
                                 wide(&format_time(0)).as_ptr(),
                             );
                         }
-                        self.start_playback(index, false);
+                        self.start_playback(index, false, None);
                     } else {
                         self.status(&self.t("audio_no_wav"));
+                    }
+                }
+                LOOP_SELECTION => {
+                    if self.playback.looping {
+                        self.audio_command(STOP);
+                        let message = self.t("loop_stopped");
+                        self.status(&message);
+                        announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+                        return;
+                    }
+                    let Some(index) = self.selected_track() else {
+                        self.status(&self.t("edit_no_track"));
+                        return;
+                    };
+                    let (start, end) = self.selected_range(index);
+                    let rate = self.project.tracks[index].sample_rate;
+                    let scale = |f| scale_frame(f, rate, self.project.sample_rate);
+                    let range = scale(start)..scale(end);
+                    if range.is_empty() || self.editor.bracket_start.is_some() {
+                        let message = self.t("loop_select_range");
+                        self.status(&message);
+                        announcement::announce(GetDlgItem(self.hwnd, 21), &message);
+                        return;
+                    }
+                    self.start_playback(index, false, Some(range));
+                    if self.playback.looping {
+                        let message = self.t("loop_started");
+                        announcement::announce(GetDlgItem(self.hwnd, 21), &message);
                     }
                 }
                 PAUSE => {
@@ -492,7 +544,11 @@ impl App {
                 .map(|e| e.snapshot())
                 .filter(|s| s.id == self.playback.id && self.playback.id != 0)
             {
-                let key = state_key(snapshot.state);
+                let key = if self.playback.looping && snapshot.state == State::Playing {
+                    "loop_started"
+                } else {
+                    state_key(snapshot.state)
+                };
                 let name = self.t("mix_name");
                 let base = format!(
                     "{}: {}. {} / {}",
@@ -538,6 +594,7 @@ impl App {
             self.poll_export();
             self.poll_maintenance();
             self.poll_microphone_check();
+            self.poll_timeline_job();
             if self.recording.is_some() {
                 self.poll_recording();
                 if self.recording.is_some() {
@@ -567,6 +624,7 @@ impl App {
                     && !self.exporter.pending()
                     && !self.maintenance.pending()
                     && !self.updates.pending()
+                    && self.timeline_job.is_none()
                     && self.playback.import.is_none()
                 {
                     DestroyWindow(self.hwnd);
@@ -633,6 +691,7 @@ impl App {
                     sonitrelix_engine::Event::Error { id, message } if id == self.playback.id => {
                         self.playback.state = State::Error;
                         self.playback.paused = false;
+                        self.playback.looping = false;
                         self.status(&self.t("audio_error"));
                         self.error_in("playback", message);
                     }
@@ -662,11 +721,15 @@ impl App {
                 }
             }
             self.update_playback_readout(changed);
+            self.poll_fastplugs();
         }
     }
 }
 pub(super) fn track_duration(t: &sonitrelix_session::Track) -> u64 {
     sonitrelix_audio_io::frames_to_ms(t.frames(), t.sample_rate)
+}
+pub(super) fn scale_frame(frame: u64, from: u32, to: u32) -> u64 {
+    (u128::from(frame) * u128::from(to) / u128::from(from)).min(u128::from(u64::MAX)) as u64
 }
 fn state_key(state: State) -> &'static str {
     match state {

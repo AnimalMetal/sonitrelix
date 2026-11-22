@@ -37,6 +37,8 @@ pub struct RecordRequest {
     pub sample_rate: u32,
     pub channels: u16,
     pub buffer_frames: u32,
+    /// Keep only this half-open range of frames from the synchronized input stream.
+    pub capture_frames: Option<std::ops::Range<u64>>,
     /// A selected output device, or an empty ID for the Windows default. None disables monitoring.
     pub monitoring_output: Option<String>,
 }
@@ -72,6 +74,7 @@ impl MicrophoneCheck {
                     paused: &AtomicBool::new(false),
                     frames: &AtomicU64::new(0),
                     deadline: Some(Instant::now() + Duration::from_secs(30)),
+                    capture_frames: 0..u64::MAX,
                 };
                 let result = unsafe {
                     capture(
@@ -125,6 +128,16 @@ pub struct Recorder {
 }
 impl Recorder {
     pub fn start(request: RecordRequest) -> io::Result<Self> {
+        if request
+            .capture_frames
+            .as_ref()
+            .is_some_and(|range| range.is_empty())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Empty capture range",
+            ));
+        }
         let wake = Arc::new(Signal::new()?);
         let stop = Arc::new(AtomicBool::new(false));
         let paused = Arc::new(AtomicBool::new(false));
@@ -249,6 +262,7 @@ fn record(
                         wake: &w,
                         meter: &meter,
                         deadline: None,
+                        capture_frames: r.capture_frames.unwrap_or(0..u64::MAX),
                     },
                     Some(&mut producer),
                     monitor_input.as_mut(),
@@ -326,6 +340,7 @@ fn record(
         )
     })?;
     if count == 0 {
+        let _ = std::fs::remove_file(&r.path);
         return Err(warning.unwrap_or_else(|| "No audio was captured".into()));
     }
     Ok(Recorded {
@@ -357,6 +372,17 @@ struct CaptureState<'a> {
     wake: &'a Signal,
     meter: &'a PeakMeter,
     deadline: Option<Instant>,
+    capture_frames: std::ops::Range<u64>,
+}
+
+fn capture_slice(
+    window: &std::ops::Range<u64>,
+    position: u64,
+    count: u32,
+) -> std::ops::Range<usize> {
+    let count = u64::from(count);
+    window.start.saturating_sub(position).min(count) as usize
+        ..window.end.saturating_sub(position).min(count) as usize
 }
 
 unsafe fn capture(
@@ -368,6 +394,7 @@ unsafe fn capture(
         wake,
         meter,
         deadline,
+        capture_frames,
     }: CaptureState<'_>,
     mut producer: Option<&mut ring::Producer>,
     mut monitor: Option<&mut ring::Producer>,
@@ -434,6 +461,7 @@ unsafe fn capture(
         let mut first = true;
         let mut running = true;
         let mut start_phase = 1u32;
+        let mut input_position = 0u64;
         while !stop.load(Ordering::Acquire) && deadline.is_none_or(|end| Instant::now() < end) {
             if paused.load(Ordering::Acquire) {
                 if running {
@@ -479,20 +507,32 @@ unsafe fn capture(
                 } else {
                     std::slice::from_raw_parts(data.cast::<f32>(), samples)
                 };
-                let written = if let Some(producer) = producer.as_deref_mut() {
-                    producer.push(input)
-                } else {
-                    input.len()
+                let channels_per_frame = usize::from(channels);
+                let keep = capture_slice(&capture_frames, input_position, count);
+                let Some(accepted) =
+                    input.get(keep.start * channels_per_frame..keep.end * channels_per_frame)
+                else {
+                    let _ = capture.ReleaseBuffer(count);
+                    return Err("Null audio input packet".into());
                 };
-                meter.observe(&input[..written]);
+                let written = if let Some(producer) = producer.as_deref_mut() {
+                    producer.push(accepted)
+                } else {
+                    accepted.len()
+                };
+                meter.observe(accepted);
                 if let Some(monitor) = monitor.as_deref_mut() {
-                    let _ = monitor.push(&input[..written]);
+                    let _ = monitor.push(input);
                 }
                 capture.ReleaseBuffer(count).map_err(err)?;
                 frames.fetch_add((written / usize::from(channels)) as u64, Ordering::Release);
                 first = false;
-                if written != samples {
+                if written != accepted.len() {
                     return Err("Recording buffer overflow; completed audio was retained".into());
+                }
+                input_position += u64::from(count);
+                if input_position >= capture_frames.end {
+                    return Ok(());
                 }
             }
         }
@@ -503,6 +543,14 @@ unsafe fn capture(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn punch_excludes_preroll_and_cuts_through_a_packet_at_each_boundary() {
+        let range = 25..48;
+        assert_eq!(capture_slice(&range, 0, 16), 16..16);
+        assert_eq!(capture_slice(&range, 16, 16), 9..16);
+        assert_eq!(capture_slice(&range, 32, 25), 0..16);
+        assert_eq!(capture_slice(&range, 57, 16), 0..0);
+    }
     #[test]
     #[ignore = "Uses the default WASAPI output with a silent monitor queue"]
     fn monitor_can_start_and_stop_on_the_default_output() {
@@ -562,6 +610,7 @@ mod tests {
                 timeline,
                 start_ms: 0,
                 start_frame: None,
+                loop_frames: None,
                 output_id: String::new(),
                 buffer_frames: 512,
                 paused: false,
@@ -569,6 +618,7 @@ mod tests {
             .unwrap();
         let recorder = Recorder::start(RecordRequest {
             gate: Some(gate),
+            capture_frames: None,
             path: path.clone(),
             input_id: String::new(),
             sample_rate: 48000,
@@ -645,6 +695,7 @@ mod tests {
         ));
         let r = Recorder::start(RecordRequest {
             gate: None,
+            capture_frames: None,
             path: path.clone(),
             input_id: "sonitrelix-nonexistent-input".into(),
             sample_rate: 48000,
