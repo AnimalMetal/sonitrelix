@@ -1,10 +1,10 @@
 # Sonitrelix
 
-Original Rust, Windows-native audio editor with English/Spanish interfaces. **Current Windows release: 0.6.6.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
+Original Rust, Windows-native audio editor with English/Spanish interfaces. **Current Windows release: 0.6.7.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
 
-Download `Sonitrelix-windows-x64.zip`, extract the whole folder and open `Sonitrelix.exe`. FFmpeg and the required Visual C++ runtime files are included. Press F1 for the user guide. Ctrl+U imports direct audio links. Recording input includes WASAPI loopback for capturing system sound. Export options include format, quality and file tags. [Windows downloads](https://github.com/AnimalMetal/sonitrelix/releases)
+Download `Sonitrelix-windows-x64.zip`, extract the whole folder and open `Sonitrelix.exe`. FastPlugs, FFmpeg and the required Visual C++ runtime files are included. Press F1 for the user guide. Ctrl+U imports direct audio links. Recording input includes WASAPI loopback for capturing system sound. Export options include format, quality and file tags. [Windows downloads](https://github.com/AnimalMetal/sonitrelix/releases)
 
-Implemented: non-destructive clip editing, exact times, undo/redo, synchronized multitrack playback, mute/solo, gain/pan, vocal recording while backing music plays, punch-in, loop playback, named markers, clip crossfades, recording-offset calibration, effects including separately installed FastPlugs, WAV/FLAC/MP3 mix export, six-tab Preferences, editing shortcut customization, recent projects, recovery checkpoints and signed portable EXE updates.
+Implemented: non-destructive clip editing, exact times, undo/redo, synchronized multitrack playback, mute/solo, gain/pan, vocal recording while backing music plays, punch-in, loop playback, named markers, clip crossfades, recording-offset calibration, effects including bundled FastPlugs, WAV/FLAC/MP3 mix export, six-tab Preferences, editing shortcut customization, recent projects, recovery checkpoints and signed portable EXE updates.
 
 Import supports WAV, MP3, FLAC and AAC in M4A through Windows Media Foundation. The bundled FFmpeg adds Ogg Vorbis, Opus, AIFF, audio extraction from supported video files, AAC and Opus export, and an MP3 encoder fallback. Export also supports PCM16 WAV and FLAC. MP3 may contain encoder padding. Use WAV or FLAC for exact duration. [FFmpeg formats and effects](docs/FFMPEG.md)
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.7
+
+- Included FastPlugs in Windows downloads and signed EXE updates. Effects > FastPlugs opens the effect list without asking for a file.
+
 ## 0.6.6
 
 - Portable builds check for updates when they open and every 24 hours while running. The manual Help > Check for updates command is still available.

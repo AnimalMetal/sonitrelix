@@ -1,9 +1,17 @@
+param([string]$FastPlugsClap)
+
 $ErrorActionPreference = 'Stop'
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if ($FastPlugsClap) {
+    $FastPlugsClap = (Resolve-Path -LiteralPath $FastPlugsClap).Path
+}
 Push-Location $workspace
 $previous = @{}
-foreach ($name in @('OPENSSL_DIR','OPENSSL_STATIC','OPENSSL_NO_VENDOR','CARGO_ENCODED_RUSTFLAGS')) { $previous[$name] = [Environment]::GetEnvironmentVariable($name,'Process') }
+foreach ($name in @('OPENSSL_DIR','OPENSSL_STATIC','OPENSSL_NO_VENDOR','CARGO_ENCODED_RUSTFLAGS','SONITRELIX_FASTPLUGS_CLAP')) { $previous[$name] = [Environment]::GetEnvironmentVariable($name,'Process') }
 try {
+    if ($FastPlugsClap) {
+        $env:SONITRELIX_FASTPLUGS_CLAP = $FastPlugsClap
+    }
     $lock = [IO.File]::ReadAllText((Join-Path $workspace 'Cargo.lock'))
     $match = [regex]::Match($lock, 'name = "openssl-src"\r?\nversion = "[^+]+\+([^"]+)"')
     if (-not $match.Success) { throw 'Cannot identify the locked native OpenSSL version.' }

@@ -14,7 +14,7 @@ For acceptance, verify every parameter's label, value and Reset action, then Pre
 
 ## FastPlugs
 
-Download the Windows x64 CLAP bundle from the [FastPlugs release](https://github.com/masonasons/FastPlugs/releases/tag/latest). Extract `FastPlugs.clap` into `data/plugins` beside your Sonitrelix executable, install it into the standard Windows CLAP folder, or select the file when prompted by **Effects > FastPlugs**.
+Official Windows builds include FastPlugs. Open **Effects > FastPlugs** to choose an effect. If you build without the bundle, install the Windows x64 CLAP from the [upstream FastPlugs release](https://github.com/masonasons/FastPlugs/releases/tag/latest) into `data/plugins` or a standard Windows CLAP folder, or select the extracted file when prompted.
 
 Select a track and the time range to process. Choose a plug-in and open Parameters to read or enter its own value text, such as `8 dB`. Preview auditions up to five seconds. Apply renders the selected range, or the whole track when no range is active. Output length is unchanged and plug-in latency is compensated. Keep some silence in the target range if you want to hear a reverb or echo decay. Ctrl+Z restores the previous edit. The two live utilities, Buffer and Clipping Monitor, are outside the offline effect list.
 

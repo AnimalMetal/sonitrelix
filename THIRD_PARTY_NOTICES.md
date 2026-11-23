@@ -43,7 +43,7 @@ Select the MIT option where offered, retaining the Unicode-3.0 terms for unicode
 
 The Microsoft [windows-rs](https://github.com/microsoft/windows-rs) bindings are linked for WASAPI and Windows threading. The WAV reader and SPSC queue are original Sonitrelix code.
 
-FastPlugs is a separate GPL-3.0 plug-in download from [its upstream project](https://github.com/masonasons/FastPlugs). Sonitrelix uses the CLAP ABI and loads the separately installed Windows bundle in a helper process. The Sonitrelix package contains neither FastPlugs binaries nor FastPlugs source.
+Official Windows builds include [FastPlugs](https://github.com/masonasons/FastPlugs), by Bryn (masonasons), under GNU GPL version 3. The application and dynamically loaded plug-in in that distribution are offered together under GPLv3. The original Sonitrelix source is also available under MIT, and the original dependency notices continue to apply. The GPLv3 license is in `third-party-licenses/FastPlugs-GPL-3.0.txt`. The Windows release page provides `FastPlugs-corresponding-source.zip` and the build instructions in [FastPlugs build](docs/FASTPLUGS_BUILD.md). Sonitrelix loads the CLAP module in a helper process. Separately packaged redistributable DLLs and FFmpeg retain their respective terms.
 
 OpenSSL 3.6.3 is statically linked for Ed25519, SHA-256 and random bytes. Its Apache-2.0 license is retained in third-party-licenses/OpenSSL-3.6.3-LICENSE.txt; build/wrapper licenses are separate.
 

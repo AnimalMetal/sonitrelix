@@ -1,7 +1,8 @@
 param(
     [string]$Executable = 'target/release/Sonitrelix.exe',
     [string]$FFmpegBuild,
-    [string]$WinpthreadsRuntime
+    [string]$WinpthreadsRuntime,
+    [string]$FastPlugsSource
 )
 $ErrorActionPreference = 'Stop'
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -20,6 +21,10 @@ foreach ($name in @('LICENSE','THIRD_PARTY_NOTICES.md','README.md','CHANGELOG.md
 foreach ($folder in @('docs','third-party-licenses')) {
     $to = Join-Path $program $folder
     Copy-Item -LiteralPath (Join-Path $workspace $folder) -Destination $to -Recurse
+}
+if ($FastPlugsSource) {
+    $source = (Resolve-Path -LiteralPath $FastPlugsSource).Path
+    Copy-Item -LiteralPath $source -Destination (Join-Path $dist 'FastPlugs-corresponding-source.zip')
 }
 if ($FFmpegBuild) {
     $ffmpeg = (Resolve-Path -LiteralPath $FFmpegBuild).Path

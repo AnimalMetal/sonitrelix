@@ -7,6 +7,7 @@ use std::sync::{
 };
 
 pub(super) const OPEN: usize = 851;
+const BUNDLED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/FastPlugs.clap"));
 
 pub(super) struct Scan {
     cancel: Arc<AtomicBool>,
@@ -31,6 +32,15 @@ fn installed(data: &std::path::Path) -> Option<PathBuf> {
     .find(|path| path.is_file())
 }
 
+fn bundled_plugin(directory: &std::path::Path) -> std::io::Result<PathBuf> {
+    let path = directory.join(concat!("FastPlugs-", env!("CARGO_PKG_VERSION"), ".clap"));
+    if !std::fs::read(&path).is_ok_and(|bytes| bytes == BUNDLED) {
+        std::fs::create_dir_all(directory)?;
+        sonitrelix_session::atomic_write(&path, BUNDLED)?;
+    }
+    Ok(path)
+}
+
 impl App {
     pub(super) unsafe fn open_fastplugs(&mut self) {
         unsafe {
@@ -38,15 +48,20 @@ impl App {
                 self.timeline_feedback(&self.t("fx_fastplugs_scanning"));
                 return;
             }
-            let Some(bundle) = self
-                .fastplugs_bundle
-                .clone()
-                .filter(|p| p.is_file())
-                .or_else(|| installed(&self.data))
-                .or_else(|| self.choose_file_with_title(false, false, Some("fx_fastplugs_open")))
-            else {
-                return;
+            let bundle = if BUNDLED.is_empty() {
+                self.fastplugs_bundle
+                    .clone()
+                    .filter(|p| p.is_file())
+                    .or_else(|| installed(&self.data))
+                    .or_else(|| {
+                        self.choose_file_with_title(false, false, Some("fx_fastplugs_open"))
+                    })
+            } else {
+                None
             };
+            if BUNDLED.is_empty() && bundle.is_none() {
+                return;
+            }
             let directory = self.data.join("effects");
             let (send, result) = mpsc::channel();
             let cancel = Arc::new(AtomicBool::new(false));
@@ -54,9 +69,17 @@ impl App {
             match std::thread::Builder::new()
                 .name("fastplugs-scan".into())
                 .spawn(move || {
-                    let effects =
-                        crate::fastplugs_helper::scan(&directory, bundle.clone(), &worker_cancel);
-                    let _ = send.send(effects.map(|effects| (bundle, effects)));
+                    let result = bundle
+                        .map_or_else(|| bundled_plugin(&directory), Ok)
+                        .and_then(|bundle| {
+                            crate::fastplugs_helper::scan(
+                                &directory,
+                                bundle.clone(),
+                                &worker_cancel,
+                            )
+                            .map(|effects| (bundle, effects))
+                        });
+                    let _ = send.send(result);
                 }) {
                 Ok(_) => {
                     self.fastplugs_scan = Some(Scan { cancel, result });

@@ -14,6 +14,8 @@ cargo test --workspace --locked
 
 The release helper reuses a matching locked static OpenSSL build from debug validation. Conventional cargo build --release --workspace --locked also works but may rebuild native OpenSSL. Close the executable before rebuilding.
 
+Use `tools/build-release.ps1 -FastPlugsClap <path-to-FastPlugs.clap>` to include FastPlugs in a Windows release or preview. Follow the [FastPlugs build instructions](docs/FASTPLUGS_BUILD.md) for the plug-in and its corresponding source archive.
+
 For public releases set `CARGO_TARGET_DIR` to a directory whose absolute path contains no personal information. The helper remaps Rust source paths, while native OpenSSL can embed its build directory. Check both binaries for personal paths before packaging. See [GitHub publication](docs/GITHUB.md) and [building the bundled FFmpeg](docs/FFMPEG_BUILD.md).
 
 For development use cargo run --locked -p sonitrelix-windows-ui --bin Sonitrelix. Resources are embedded. A writable portable folder holds data beside the executable. Preserve imports/recordings with projects. Packaging creates a fresh allowlisted folder under dist, excludes data/private keys and includes only release vcruntime140 DLLs from the Microsoft redistributable directory under Microsoft terms. The portable marker enables EXE installation. Future runtime/asset changes require a full package.
