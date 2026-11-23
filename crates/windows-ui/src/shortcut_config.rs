@@ -142,7 +142,10 @@ pub(super) fn route(
     settings: &sonitrelix_settings::Settings,
 ) -> Option<Action> {
     let default = shortcuts::route(key, ctrl, shift, alt, scope);
-    if !scope.editing() || fixed_timeline_shortcut(default) {
+    if !scope.editing()
+        || default == Some(Action::Command(OPEN_LINK))
+        || fixed_timeline_shortcut(default)
+    {
         return default;
     }
     let pressed = Chord {

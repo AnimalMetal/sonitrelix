@@ -191,6 +191,10 @@ fn export_inner(
         if mp3 { "mp3" } else { "wav" }
     ));
     let mut external = external_format;
+    let has_metadata = !p.export_metadata.is_empty();
+    let tagger = has_metadata.then(require_ffmpeg).transpose()?;
+    let tagged = temp.with_extension("tagged");
+    let tag_file = temp.with_extension("ffmetadata");
     let mut helper = if external.is_some() {
         Some(require_ffmpeg()?)
     } else {
@@ -274,7 +278,13 @@ fn export_inner(
             clipped += block.iter().filter(|v| v.abs() > 1.).count() as u64;
             writer.write(block)?;
             done += n as u64;
-            let render_percent = if external.is_some() { 75 } else { 100 };
+            let render_percent = if external.is_some() {
+                75
+            } else if has_metadata {
+                90
+            } else {
+                100
+            };
             progress.store(
                 (done * render_percent / info.frames) as u32,
                 Ordering::Relaxed,
@@ -291,6 +301,44 @@ fn export_inner(
                 cancel,
             )?;
         }
+        let completed = if let Some(exe) = tagger {
+            let mut text = String::from(";FFMETADATA1\n");
+            for (key, value) in p.export_metadata.tags() {
+                if value.is_empty() {
+                    continue;
+                }
+                text.push_str(key);
+                text.push('=');
+                for character in value.chars() {
+                    if ['\\', '=', ';', '#', '\n'].contains(&character) {
+                        text.push('\\');
+                    }
+                    text.push(character);
+                }
+                text.push('\n');
+            }
+            use std::io::Write;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tag_file)?
+                .write_all(text.as_bytes())?;
+            let muxer = if mp3 {
+                "mp3"
+            } else if flac {
+                "flac"
+            } else {
+                match external_format {
+                    Some(ffmpeg::Format::Aac) => "ipod",
+                    Some(ffmpeg::Format::Opus) => "opus",
+                    _ => "wav",
+                }
+            };
+            ffmpeg::tag(&exe, &temp, &tag_file, &tagged, muxer, cancel)?;
+            &tagged
+        } else {
+            &temp
+        };
         if cancel.load(Ordering::Relaxed) {
             return Err(io::Error::new(
                 io::ErrorKind::Interrupted,
@@ -300,9 +348,9 @@ fn export_inner(
         std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(&temp)?
+            .open(completed)?
             .sync_all()?;
-        sonitrelix_session::replace(&temp, path)?;
+        sonitrelix_session::replace(completed, path)?;
         progress.store(100, Ordering::Relaxed);
         Ok(Exported {
             path: path.into(),
@@ -312,8 +360,12 @@ fn export_inner(
     if external.is_some() {
         let _ = std::fs::remove_file(intermediate);
     }
-    if result.is_err() {
+    if result.is_err() || has_metadata {
         let _ = std::fs::remove_file(temp);
+    }
+    if has_metadata {
+        let _ = std::fs::remove_file(tag_file);
+        let _ = std::fs::remove_file(tagged);
     }
     result
 }
@@ -327,6 +379,63 @@ fn require_ffmpeg() -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "Needs the FFmpeg build bundled with Sonitrelix, or an equivalent build on PATH"]
+    fn exported_tags_round_trip_in_each_audio_format() {
+        let exe = require_ffmpeg().unwrap();
+        let dir =
+            std::env::temp_dir().join(format!("sonitrelix-export-tags-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let mut project = Project::default();
+        project.add_track("Tone".into());
+        project.tracks[0].clips.push(sonitrelix_session::Clip {
+            source: None,
+            source_start: 0,
+            frames: 12_000,
+        });
+        project.export_metadata = sonitrelix_session::ExportMetadata {
+            title: "Grabación".into(),
+            artist: "Álvaro".into(),
+            album: "Acústico".into(),
+            track: "2".into(),
+            year: "2026".into(),
+            genre: "Jazz".into(),
+            comment: "Sesión = café; take #2".into(),
+        };
+        let cancel = AtomicBool::new(false);
+        let progress = AtomicU32::new(0);
+        for extension in ["wav", "flac", "mp3", "m4a", "opus"] {
+            let path = dir.join(format!("export.{extension}"));
+            export(&project, &path, &cancel, &progress).unwrap();
+            let mut command = std::process::Command::new(&exe);
+            command.args(["-v", "error", "-i"]).arg(&path);
+            if extension == "opus" {
+                command.args(["-map_metadata", "0:s:a:0"]);
+            }
+            let output = command.args(["-f", "ffmetadata", "-"]).output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let text = String::from_utf8(output.stdout).unwrap();
+            for (name, value) in project.export_metadata.tags() {
+                let tag = text.lines().find_map(|line| {
+                    let (key, tag) = line.split_once('=')?;
+                    key.eq_ignore_ascii_case(name).then_some(tag)
+                });
+                let actual = tag.map(|tag| {
+                    tag.replace("\\=", "=")
+                        .replace("\\;", ";")
+                        .replace("\\#", "#")
+                });
+                assert_eq!(actual.as_deref(), Some(value), "{extension} {name}: {text}");
+            }
+            assert_eq!(progress.load(Ordering::Relaxed), 100);
+        }
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 5);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     #[ignore = "Requires FFmpeg on PATH with AAC, libopus, libmp3lame and libvorbis"]
     fn ffmpeg_export_and_audio_extraction_round_trip() {

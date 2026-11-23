@@ -1,13 +1,13 @@
 # Multitrack recording and mixing
 
-Use headphones and a disposable project. Select input/output independently in Tools > Preferences. Recording channels must match an existing target track. Use Transport > Test microphone and F8 to check input before a take. Optional microphone monitoring is off by default and should be used with headphones.
+Use headphones and a disposable project. Select input/output independently in Tools > Preferences. Recording channels must match an existing target track. Use Transport > Test recording input and F8 to check input before a take. Optional microphone monitoring is off by default and should be used with headphones.
 
 1. Ctrl+I imports instrumental music. Ctrl+Shift+N adds a track; F2 names it Vocals; A arms it. Home moves to its start.
 2. R records while the other audible tracks play. Ctrl+Space pauses/resumes both streams. R or Space stops. Completed capture replaces its interval without moving later audio.
 3. Listen to alignment. Adjust the manual recording offset in Recording/playback preferences; negative values place capture earlier. Repeat a short click/clap test. Coordinated stream starts do not measure actual hardware latency or drift.
 4. Ctrl+G adjusts volume/pan. M/S toggles mute/solo. Space plays the audible project mix, including tracks with different sample rates.
 5. Enter exact selection times. Ctrl+A selects the whole selected track; Ctrl+C/X/V, Delete, split and trim edit it. Ctrl+E previews/applies effects, including reverb. Undo restores previous audio references.
-6. Preferences > Export selects rate, channels and MP3 bitrate. Ctrl+Shift+E exports WAV, FLAC or MP3. Reopen and compare the result. MP3 includes possible encoder priming/padding; use WAV/FLAC for exact duration.
+6. Ctrl+Shift+E opens Export Options. Choose the format, rate and channels, and use Metadata for tags. Reopen and compare the result. MP3 includes possible encoder priming/padding; use WAV/FLAC for exact duration.
 7. Save/reopen and verify names, state, boundaries and mix. Keep originals and data/imports and data/recordings: projects reference assets rather than embedding them.
 8. Leave unsaved edits for 30 seconds, terminate only a disposable instance, then reopen and recover its metadata checkpoint. If a take was interrupted, Ctrl+I can recover complete frames from a Sonitrelix PCM16 recording with a readable header.
 

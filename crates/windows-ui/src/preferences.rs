@@ -264,20 +264,50 @@ impl Context {
                     );
                 }
                 1 => {
+                    let mut sources = self
+                        .catalog
+                        .as_ref()
+                        .map(|c| c.inputs.clone())
+                        .unwrap_or_default();
+                    for source in &mut sources {
+                        source.name = self
+                            .t("pref_microphone_choice")
+                            .replace("{device}", &source.name);
+                    }
+                    let outputs = self
+                        .catalog
+                        .as_ref()
+                        .map(|c| c.outputs.as_slice())
+                        .unwrap_or(&[]);
+                    let default_loopback = self.t("pref_loopback_default");
+                    let default_label = outputs
+                        .iter()
+                        .find(|d| d.is_default)
+                        .map_or(default_loopback.clone(), |d| {
+                            format!("{default_loopback}: {}", d.name)
+                        });
+                    sources.push(Device {
+                        id: sonitrelix_engine::recording::loopback_selection(""),
+                        name: default_label,
+                        is_default: false,
+                    });
+                    sources.extend(outputs.iter().map(|device| {
+                        Device {
+                            id: sonitrelix_engine::recording::loopback_selection(&device.id),
+                            name: self
+                                .t("pref_loopback_choice")
+                                .replace("{device}", &device.name),
+                            is_default: false,
+                        }
+                    }));
                     self.inputs = device_choices(
-                        self.catalog
-                            .as_ref()
-                            .map(|c| c.inputs.as_slice())
-                            .unwrap_or(&[]),
+                        &sources,
                         &self.draft.devices.input_id,
                         &self.t("pref_system_default"),
                         &self.t("pref_unavailable"),
                     );
                     self.outputs = device_choices(
-                        self.catalog
-                            .as_ref()
-                            .map(|c| c.outputs.as_slice())
-                            .unwrap_or(&[]),
+                        outputs,
                         &self.draft.devices.output_id,
                         &self.t("pref_system_default"),
                         &self.t("pref_unavailable"),
@@ -1087,6 +1117,52 @@ mod tests {
                     .iter()
                     .any(|(id, name)| id == "mic-b" && name.contains("unavailable"))
             );
+            dialog
+                .context
+                .catalog
+                .as_mut()
+                .unwrap()
+                .outputs
+                .push(Device {
+                    id: "output-a".into(),
+                    name: "USB Headset".into(),
+                    is_default: true,
+                });
+            dialog.context.populate(1);
+            let loopback_index = dialog
+                .context
+                .inputs
+                .iter()
+                .position(|(id, name)| {
+                    id == "loopback:output-a" && name == "Loopback — USB Headset"
+                })
+                .unwrap();
+            assert!(
+                dialog
+                    .context
+                    .inputs
+                    .iter()
+                    .any(|(id, name)| id == "loopback:" && name.contains("USB Headset"))
+            );
+            SendMessageW(
+                GetDlgItem(dialog.context.pages[1], 2001),
+                0x14e,
+                loopback_index,
+                0,
+            );
+            assert_eq!(
+                dialog.context.read_all().unwrap().devices.input_id,
+                "loopback:output-a"
+            );
+            assert!(
+                dialog
+                    .context
+                    .read_all()
+                    .unwrap()
+                    .devices
+                    .output_id
+                    .is_empty()
+            );
             set(editing, 4001, "0");
             assert_eq!(
                 dialog.context.read_all().unwrap_err(),
@@ -1114,6 +1190,7 @@ mod tests {
             );
             let applied = dialog.take_applied().expect("Apply produced new settings");
             assert_eq!(applied.settings.general.language, "es");
+            assert_eq!(applied.settings.devices.input_id, "loopback:output-a");
             assert_eq!(applied.settings.general.new_project_sample_rate, 96000);
             assert_eq!(applied.settings.recording.offset_ms, -25);
             assert_eq!(applied.settings.editing.step_ms, 25);

@@ -23,13 +23,25 @@ use windows::{
         Media::Audio::*,
         System::{
             Com::{
-                CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+                CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
+                CoUninitialize,
             },
             Threading::WaitForSingleObject,
         },
     },
     core::PCWSTR,
 };
+const LOOPBACK_PREFIX: &str = "loopback:";
+
+pub fn loopback_selection(endpoint_id: &str) -> String {
+    format!("{LOOPBACK_PREFIX}{endpoint_id}")
+}
+
+/// An empty loopback endpoint ID follows the default Windows playback endpoint.
+pub fn loopback_endpoint(input_id: &str) -> Option<&str> {
+    input_id.strip_prefix(LOOPBACK_PREFIX)
+}
+
 pub struct RecordRequest {
     pub gate: Option<Arc<super::StartGate>>,
     pub path: PathBuf,
@@ -238,11 +250,14 @@ fn record(
     let channels = r.channels;
     let buffer = r.buffer_frames;
     let gate = r.gate.clone();
-    let monitor = r.monitoring_output.map(|output| {
-        let frames = (rate / 10).clamp(1024, 32768) as usize;
-        let (input, render) = ring::ring((frames * usize::from(channels)).next_power_of_two());
-        (input, (output, render))
-    });
+    let monitor = r
+        .monitoring_output
+        .filter(|_| loopback_endpoint(&input).is_none())
+        .map(|output| {
+            let frames = (rate / 10).clamp(1024, 32768) as usize;
+            let (input, render) = ring::ring((frames * usize::from(channels)).next_power_of_two());
+            (input, (output, render))
+        });
     let (mut monitor_input, monitor_output) = match monitor {
         Some((input, output)) => (Some(input), Some(output)),
         None => (None, None),
@@ -414,12 +429,21 @@ unsafe fn capture(
         let _apartment = Apartment;
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(err)?;
-        let device = if input.is_empty() {
+        let loopback = loopback_endpoint(input);
+        let selected = loopback.unwrap_or(input);
+        let device = if selected.is_empty() {
             enumerator
-                .GetDefaultAudioEndpoint(eCapture, eMultimedia)
+                .GetDefaultAudioEndpoint(
+                    if loopback.is_some() {
+                        eRender
+                    } else {
+                        eCapture
+                    },
+                    eMultimedia,
+                )
                 .map_err(err)?
         } else {
-            let id: Vec<_> = input.encode_utf16().chain(Some(0)).collect();
+            let id: Vec<_> = selected.encode_utf16().chain(Some(0)).collect();
             enumerator.GetDevice(PCWSTR(id.as_ptr())).map_err(err)?
         };
         let client = Client(device.Activate(CLSCTX_ALL, None).map_err(err)?);
@@ -439,7 +463,12 @@ unsafe fn capture(
                 AUDCLNT_STREAMFLAGS_EVENTCALLBACK
                     | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
                     | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
-                    | AUDCLNT_STREAMFLAGS_NOPERSIST,
+                    | AUDCLNT_STREAMFLAGS_NOPERSIST
+                    | if loopback.is_some() {
+                        AUDCLNT_STREAMFLAGS_LOOPBACK
+                    } else {
+                        0
+                    },
                 i64::from(buffer.clamp(128, 2048)) * 10000000 / i64::from(rate),
                 0,
                 &format,
@@ -453,6 +482,15 @@ unsafe fn capture(
         }
         let capture: IAudioCaptureClient = client.0.GetService().map_err(err)?;
         let zeros = vec![0f32; capacity as usize * usize::from(channels)];
+        let clock = if loopback.is_some() {
+            let id = device.GetId().map_err(err)?;
+            let endpoint = id.to_string().map_err(|error| error.to_string());
+            CoTaskMemFree(Some(id.0.cast()));
+            Some(start_loopback_clock(endpoint?, rate, buffer).map_err(|error| error.to_string())?)
+        } else {
+            None
+        };
+        let gate = clock.as_ref().map(|(_, gate)| gate.as_ref()).or(gate);
         if let Some(gate) = gate {
             gate.wait(2, 1, || stop.load(Ordering::Acquire))
                 .map_err(|e| e.to_string())?;
@@ -466,12 +504,18 @@ unsafe fn capture(
             if paused.load(Ordering::Acquire) {
                 if running {
                     client.0.Stop().map_err(err)?;
+                    if let Some((clock, _)) = &clock {
+                        clock.pause(true);
+                    }
                     running = false;
                 }
                 WaitForSingleObject(wake.0, 50);
                 continue;
             }
             if !running {
+                if let Some((clock, _)) = &clock {
+                    clock.pause(false);
+                }
                 start_phase += 1;
                 if let Some(gate) = gate
                     && let Err(e) = gate.wait(2, start_phase, || stop.load(Ordering::Acquire))
@@ -487,6 +531,11 @@ unsafe fn capture(
             }
             if WaitForSingleObject(wake.0, 100) == WAIT_FAILED {
                 return Err("Capture wait failed".into());
+            }
+            if let Some((clock, _)) = &clock
+                && let Some(super::Event::Error { message, .. }) = clock.try_event()
+            {
+                return Err(message);
             }
             while capture.GetNextPacketSize().map_err(err)? > 0 && !stop.load(Ordering::Acquire) {
                 let mut data = std::ptr::null_mut();
@@ -540,9 +589,148 @@ unsafe fn capture(
     }
 }
 
+fn start_loopback_clock(
+    endpoint: String,
+    rate: u32,
+    buffer_frames: u32,
+) -> io::Result<(super::Engine, Arc<super::StartGate>)> {
+    // WASAPI may stop delivering capture packets when no client plays on this endpoint.
+    // A silent stream on the same output keeps the recording clock running between sounds.
+    let gate = Arc::new(super::StartGate::new());
+    let timeline = sonitrelix_audio_io::Timeline::new(
+        rate,
+        2,
+        vec![sonitrelix_audio_io::Segment {
+            source: None,
+            source_start: 0,
+            frames: u64::from(rate),
+        }],
+    )?;
+    let mut clock = super::Engine::new()?;
+    clock.play(super::PlayRequest {
+        gate: Some(gate.clone()),
+        timeline,
+        start_ms: 0,
+        start_frame: None,
+        loop_frames: Some(0..u64::from(rate)),
+        output_id: endpoint,
+        buffer_frames,
+        paused: false,
+    })?;
+    Ok((clock, gate))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "Plays a brief quiet tone on the default Windows output and captures it without opening a microphone"]
+    fn loopback_captures_the_selected_output_and_keeps_time_between_sounds() {
+        struct Scratch(PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                for name in ["tone.wav", "loopback.wav"] {
+                    let _ = std::fs::remove_file(self.0.join(name));
+                }
+                let _ = std::fs::remove_dir(&self.0);
+            }
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = Scratch(std::env::temp_dir().join(format!("sonitrelix-loopback-{stamp}")));
+        std::fs::create_dir(&root.0).unwrap();
+        let catalog = sonitrelix_devices::enumerate().unwrap();
+        let endpoint = catalog
+            .outputs
+            .iter()
+            .find(|device| device.is_default)
+            .expect("A Windows multimedia output is required");
+        let tone_path = root.0.join("tone.wav");
+        let mut tone = WavWriter::create(&tone_path, 48_000, 2).unwrap();
+        let phase = |i: usize| std::f32::consts::TAU * (i % 48) as f32 / 48.;
+        let mut pulse = Vec::new();
+        for i in 0..12_000 {
+            let ramp = (i.min(11_999 - i) as f32 / 480.).min(1.);
+            pulse.extend([phase(i).sin() * 0.02 * ramp; 2]);
+        }
+        tone.write_frames(&pulse).unwrap();
+        let info = tone.finish().unwrap();
+        let path = root.0.join("loopback.wav");
+        let recorder = Recorder::start(RecordRequest {
+            gate: None,
+            path: path.clone(),
+            input_id: loopback_selection(&endpoint.id),
+            sample_rate: 48_000,
+            channels: 2,
+            buffer_frames: 512,
+            capture_frames: Some(0..38_400),
+            monitoring_output: None,
+        })
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(8);
+        while recorder.frames() < 4_800 {
+            assert!(Instant::now() < deadline, "No loopback capture clock");
+            assert!(
+                recorder.try_result().is_none(),
+                "Loopback stopped before the test tone"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        let mut playback = super::super::Engine::new().unwrap();
+        playback
+            .play(super::super::PlayRequest {
+                gate: None,
+                timeline: sonitrelix_audio_io::Timeline::single(tone_path, info).unwrap(),
+                start_ms: 0,
+                start_frame: None,
+                loop_frames: None,
+                output_id: endpoint.id.clone(),
+                buffer_frames: 512,
+                paused: false,
+            })
+            .unwrap();
+        let saved = loop {
+            assert!(Instant::now() < deadline, "Loopback did not finish");
+            assert!(
+                playback.try_event().is_none(),
+                "The test tone could not play"
+            );
+            if let Some(result) = recorder.try_result() {
+                break result.unwrap();
+            }
+            thread::sleep(Duration::from_millis(5));
+        };
+        assert!(saved.warning.is_none(), "{:?}", saved.warning);
+        assert_eq!(saved.info.frames, 38_400);
+        let mut reader = sonitrelix_audio_io::WavReader::open(&path).unwrap();
+        let mut samples = vec![0.; 38_400 * 2];
+        for block in samples.chunks_mut(8_192 * 2) {
+            assert_eq!(reader.read_frames(block).unwrap(), block.len() / 2);
+        }
+        let peak = samples
+            .chunks_exact(960 * 2)
+            .map(|block| {
+                let (sine, cosine) =
+                    block
+                        .chunks_exact(2)
+                        .enumerate()
+                        .fold((0., 0.), |(sin, cos), (i, lr)| {
+                            (sin + lr[0] * phase(i).sin(), cos + lr[0] * phase(i).cos())
+                        });
+                sine.hypot(cosine) * (2. / 960.)
+            })
+            .fold(0., f32::max);
+        assert!(
+            peak > 0.0008,
+            "The 1 kHz test tone was missing, peak {peak}"
+        );
+        println!(
+            "Captured {} stereo frames from the selected playback endpoint and detected the test tone.",
+            saved.info.frames
+        );
+    }
     #[test]
     fn punch_excludes_preroll_and_cuts_through_a_packet_at_each_boundary() {
         let range = 25..48;

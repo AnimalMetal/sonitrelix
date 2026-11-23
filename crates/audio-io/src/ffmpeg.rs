@@ -85,7 +85,18 @@ fn run(
             "-1",
         ])
         .args(options)
-        .arg(output)
+        .arg(output);
+    run_command(command, output, cancel)
+}
+
+fn run_command(mut command: Command, output: &Path, cancel: &AtomicBool) -> io::Result<()> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "Audio conversion cancelled",
+        ));
+    }
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -101,7 +112,7 @@ fn run(
         let mut tail = Vec::with_capacity(8192);
         let mut block = [0; 4096];
         while let Ok(n @ 1..) = stderr.read(&mut block) {
-            let excess = (tail.len() + n).saturating_sub(8192);
+            let excess = (tail.len() + n).saturating_sub(8192).min(tail.len());
             tail.drain(..excess);
             tail.extend_from_slice(&block[..n]);
         }
@@ -150,6 +161,50 @@ fn run(
             String::from_utf8_lossy(&errors).trim()
         )))
     }
+}
+
+/// Copy the rendered audio packets unchanged and apply UTF-8 tags from an FFmetadata file.
+pub fn tag(
+    exe: &Path,
+    audio: &Path,
+    metadata: &Path,
+    output: &Path,
+    format: &str,
+    cancel: &AtomicBool,
+) -> io::Result<()> {
+    let mut command = Command::new(exe);
+    command
+        .args([
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-xerror",
+            "-n",
+            "-protocol_whitelist",
+            "file",
+            "-format_whitelist",
+            INPUT_FORMATS,
+            "-i",
+        ])
+        .arg(audio)
+        .args(["-protocol_whitelist", "file", "-f", "ffmetadata", "-i"])
+        .arg(metadata)
+        .args([
+            "-map",
+            "0:a:0",
+            "-map_metadata",
+            "1:g",
+            "-map_chapters",
+            "-1",
+            "-c:a",
+            "copy",
+        ]);
+    if format == "opus" {
+        command.args(["-map_metadata:s:a:0", "1:g"]);
+    }
+    command.args(["-f", format]).arg(output);
+    run_command(command, output, cancel)
 }
 
 pub fn decode(exe: &Path, input: &Path, output: &Path, cancel: &AtomicBool) -> io::Result<WavInfo> {

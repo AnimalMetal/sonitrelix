@@ -1,6 +1,6 @@
 # Signed portable updates
 
-Help > Check for updates checks published stable GitHub Releases. By default, portable packages check about once per day while idle. When a check is due at startup, the app normally waits about 30 seconds. Disable automatic checks in Preferences > General. Installation requires a newer signed update.json and a portable marker. Unmarked/source builds offer manual downloads. Save work and stop recording before installing. Skip this version confirms once the preference is saved. It suppresses automatic offers for that version. Manual checks can offer it again.
+Help > Check for updates checks published stable GitHub Releases. By default, a portable copy starts a background check as soon as the main window opens and checks again every 24 hours while the app remains open. Automatic notices wait until playback and recording are idle. Disable automatic checks in Preferences > General. The manual command works with automatic checks turned off. Installation requires a newer signed update.json and a portable marker. Unmarked/source builds offer manual downloads. Save work and stop recording before installing. Skip this version suppresses automatic offers for that version. Manual checks can offer it again.
 
 The embedded Ed25519 public key verifies the exact payload before trusting its version, URL, size or SHA-256. HTTPS requests use Windows TLS/proxy with bounded timeouts and response sizes. Private partial downloads can resume, then must match the signed size/hash. A highest-confirmed-version floor rejects downgrades.
 
@@ -15,7 +15,7 @@ The private key is data/signing/update-ed25519.pem. Keep a secure offline backup
 3. With Python 3.11+ and cryptography, sign without executing the downloaded artifact:
 
 ```powershell
-python tools/release_manifest.py sign --exe path/to/Sonitrelix.exe --version 0.6.5 --output update.json --notes-en "Release notes" --notes-es "Novedades"
+python tools/release_manifest.py sign --exe path/to/Sonitrelix.exe --version 0.6.6 --output update.json --notes-en "Release notes" --notes-es "Novedades"
 ```
 
 4. Upload update.json beside the exact signed Sonitrelix.exe. Verify that the portable ZIP contains that same executable and complete the release checks before publishing.
@@ -24,4 +24,4 @@ An independent fork can generate its own key before building with the tool's gen
 
 ## Español
 
-Ayuda > Buscar actualizaciones verifica versiones estables. Los paquetes portables comprueban diariamente; se desactiva en Preferencias > General. Instalar verifica firma, tamaño y SHA-256, permite cancelar y conserva data. Si falla el arranque, vuelve al ejecutable anterior. Guarde la clave privada solo en el equipo de firma y su copia segura; nunca en GitHub. La prueba de actualización de 0.6.3 a 0.6.4 descargó desde GitHub, reinició con la nueva versión y conservó la carpeta de datos.
+Ayuda > Buscar actualizaciones verifica versiones estables. Los paquetes portátiles comprueban al abrirse y cada 24 horas mientras estén abiertos. Puede desactivar la comprobación automática en Preferencias > General; la opción manual sigue disponible. Instalar verifica firma, tamaño y SHA-256, permite cancelar y conserva data. Si falla el arranque, vuelve al ejecutable anterior. Guarde la clave privada solo en el equipo de firma y su copia segura; nunca en GitHub. La prueba de actualización de 0.6.3 a 0.6.4 descargó desde GitHub, reinició con la nueva versión y conservó la carpeta de datos.

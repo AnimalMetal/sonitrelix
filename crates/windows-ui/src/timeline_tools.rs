@@ -234,6 +234,14 @@ impl App {
 
     pub(super) unsafe fn calibrate_command(&mut self) {
         unsafe {
+            if sonitrelix_engine::recording::loopback_endpoint(
+                &self.store.settings.devices.input_id,
+            )
+            .is_some()
+            {
+                self.timeline_feedback(&self.t("loopback_calibration"));
+                return;
+            }
             self.modal.set(true);
             let confirm = MessageBoxW(
                 self.hwnd,

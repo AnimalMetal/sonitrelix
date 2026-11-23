@@ -1,4 +1,4 @@
-# Keyboard shortcuts / Atajos — 0.6.5
+# Keyboard shortcuts / Atajos — 0.6.6
 
 Audio and track commands act on the selected track when **Tracks or Clips has focus**. In text fields, ordinary typing and Ctrl+A/C/X/V/Z keep Windows text-editing behavior. Ctrl+A never selects all tracks. The clipboard stores Sonitrelix clips internally; it is not the Windows audio clipboard.
 
@@ -7,6 +7,7 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | Ctrl+N / Ctrl+O | New / open project | Nuevo / abrir proyecto |
 | Ctrl+S / Ctrl+Shift+S | Save / Save as | Guardar / Guardar como |
 | Ctrl+I | Import audio | Importar audio |
+| Ctrl+U | Open a direct audio-file link as a new track | Abrir un enlace directo a un archivo de audio como pista nueva |
 | Ctrl+, | Tools > Preferences | Herramientas > Preferencias |
 | F1 | User guide | Guía |
 | F3 | Start or stop looping the marked selection in the main window | Iniciar o detener la repetición de la selección en la ventana principal |
@@ -56,7 +57,7 @@ Preferences: Ctrl+Tab / Ctrl+Shift+Tab changes category, Tab traverses controls,
 
 Preferencias: Ctrl+Tab / Ctrl+Mayús+Tab cambia categoría; Tab recorre controles y Escape cancela. F1 / Ctrl+H abre ayuda de categoría. Guía: Ctrl+F busca, F3 siguiente, Intro busca o lee sección y Escape cierra.
 
-Preferences > Editing/keyboard customizes 22 editing/track actions; Apply saves. Global project/time/help shortcuts stay fixed. Conflicts/reserved keys are rejected. Ctrl+G adjusts gain/pan; Ctrl+Shift+E exports the mix. Recording plays backing tracks and can monitor the microphone with headphones when enabled in Preferences. Transport > Test microphone measures the input without saving audio; Escape ends the test.
+Preferences > Editing/keyboard customizes 22 editing/track actions; Apply saves. Global project/time/help shortcuts stay fixed. Conflicts/reserved keys are rejected. Ctrl+G adjusts gain/pan; Ctrl+Shift+E opens Export Options for the mix. Recording plays backing tracks and can monitor the microphone with headphones when enabled in Preferences. Transport > Test recording input measures the input without saving audio; Escape ends the test.
 
 In Effects and Volume and pan, Tab moves from each slider to its Reset button. Space activates Reset. Use the arrow keys or Page Up and Page Down on the slider. Confirm with Apply or OK.
 

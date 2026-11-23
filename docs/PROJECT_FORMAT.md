@@ -1,11 +1,12 @@
-# Project format v5
+# Project format v6
 
-UTF-8 JSON with a .sonitrelix extension. Versions 1 through 4 migrate in memory. Subsequent saves write version 5. Keep a copy of the earlier project if you need to reopen it in an older Sonitrelix build. Saving preserves the source files.
+UTF-8 JSON with a .sonitrelix extension. Versions 1 through 5 migrate in memory. Subsequent saves write version 6. Keep a copy of the earlier project if you need to reopen it in an older Sonitrelix build. Saving preserves the source files.
 
 ```json
 {
-  "version": 5,
+  "version": 6,
   "sample_rate": 48000,
+  "export_metadata": {"title": "Session", "artist": "Studio A", "track": "2"},
   "markers": [{"name": "Chorus", "frame": 2880000}],
   "tracks": [{
     "name": "Vocals", "mute": false, "solo": false, "armed": true,
@@ -31,3 +32,5 @@ Project saves require .sonitrelix and reject a destination resolving to a refere
 Version 4 adds optional original_sources: an array of absolute original compressed-source paths, protected against save/export overwrite. Version 3 upgrades without changing clips. Paths remain references, not embedded assets.
 
 Version 5 adds optional `markers`, sorted by project frame. Each entry holds its name and an absolute frame at the project sample rate. Markers keep their times when audio edits shift clips. Versions 1 through 4 open with an empty marker list.
+
+Version 6 adds optional `export_metadata` with title, artist, album, track number, year, genre, and comment. Fields are Unicode strings. Blank fields are omitted from file tags. Projects from earlier versions open with empty tags. Exporting a marked excerpt can use temporary tags without changing the project's saved tags.

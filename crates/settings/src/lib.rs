@@ -9,6 +9,7 @@ pub const EXPORT_RATES: &[u32] = &[
     0, 8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 192000,
 ];
 pub const BITRATES: &[u32] = &[64, 96, 128, 160, 192, 224, 256, 320];
+pub const EXPORT_FORMATS: &[&str] = &["wav", "flac", "mp3", "m4a", "opus"];
 pub const BUFFER_SIZES: &[u32] = &[128, 256, 512, 1024, 2048];
 pub const UI_LANGUAGES: &[&str] = &["auto", "en", "es"];
 
@@ -60,6 +61,7 @@ section!(Accessibility {
     focus_status: bool = false
 });
 section!(Export {
+    format: String = "wav".into(),
     sample_rate: u32 = 0,
     channels: u16 = 2,
     mp3_bitrate: u32 = 192
@@ -110,7 +112,8 @@ impl Settings {
         }
     }
     pub fn validate(&self) -> Result<(), &'static str> {
-        if !EXPORT_RATES.contains(&self.export.sample_rate)
+        if !EXPORT_FORMATS.contains(&self.export.format.as_str())
+            || !EXPORT_RATES.contains(&self.export.sample_rate)
             || ![1, 2].contains(&self.export.channels)
             || !BITRATES.contains(&self.export.mp3_bitrate)
         {
@@ -360,6 +363,11 @@ fn decode(bytes: &[u8]) -> Result<(Settings, Vec<String>), DecodeError> {
                 .is_some_and(|v| (1..=3600000).contains(&v)),
         ),
         (
+            "export",
+            "format",
+            EXPORT_FORMATS.contains(&value["export"]["format"].as_str().unwrap_or("")),
+        ),
+        (
             "devices",
             "input_id",
             valid_id(&value["devices"]["input_id"]),
@@ -465,7 +473,11 @@ mod tests {
         store.save(first.clone()).unwrap();
         let mut second = first.clone();
         second.general.language = "es".into();
-        store.save(second).unwrap();
+        second.export.format = "mp3".into();
+        second.export.sample_rate = 44100;
+        second.export.mp3_bitrate = 256;
+        store.save(second.clone()).unwrap();
+        assert_eq!(Store::load(&p).settings, second);
         fs::remove_file(&p).unwrap();
         let missing_primary = Store::load(&p);
         assert_eq!(missing_primary.settings, first);

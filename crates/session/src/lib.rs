@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Clip {
@@ -73,6 +73,41 @@ pub struct Marker {
     pub name: String,
     pub frame: u64,
 }
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExportMetadata {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub track: String,
+    pub year: String,
+    pub genre: String,
+    pub comment: String,
+}
+impl ExportMetadata {
+    pub fn tags(&self) -> [(&'static str, &str); 7] {
+        [
+            ("title", &self.title),
+            ("artist", &self.artist),
+            ("album", &self.album),
+            ("track", &self.track),
+            ("date", &self.year),
+            ("genre", &self.genre),
+            ("comment", &self.comment),
+        ]
+    }
+    pub fn is_empty(&self) -> bool {
+        self.tags().iter().all(|(_, value)| value.is_empty())
+    }
+    pub fn is_valid(&self) -> bool {
+        self.tags()
+            .iter()
+            .all(|(_, value)| value.len() <= 2048 && !value.chars().any(char::is_control))
+            && (self.track.is_empty() || self.track.parse::<u16>().is_ok_and(|n| n > 0))
+            && (self.year.is_empty()
+                || (self.year.len() == 4 && self.year.bytes().all(|b| b.is_ascii_digit())))
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Project {
@@ -83,6 +118,8 @@ pub struct Project {
     pub original_sources: Vec<PathBuf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markers: Vec<Marker>,
+    #[serde(default, skip_serializing_if = "ExportMetadata::is_empty")]
+    pub export_metadata: ExportMetadata,
 }
 impl Default for Project {
     fn default() -> Self {
@@ -92,6 +129,7 @@ impl Default for Project {
             tracks: vec![],
             original_sources: vec![],
             markers: vec![],
+            export_metadata: ExportMetadata::default(),
         }
     }
 }
@@ -134,7 +172,7 @@ impl Project {
             }
             p.version = SCHEMA_VERSION;
         }
-        if [3, 4].contains(&p.version) {
+        if [3, 4, 5].contains(&p.version) {
             p.version = SCHEMA_VERSION;
         }
         p.validate()?;
@@ -146,6 +184,7 @@ impl Project {
             || self.original_sources.len() > 100000
             || self.original_sources.iter().any(|p| !p.is_absolute())
             || self.markers.len() > 10000
+            || !self.export_metadata.is_valid()
             || self.markers.iter().any(|marker| {
                 marker.name.trim().is_empty()
                     || marker.name.len() > 256
@@ -325,6 +364,10 @@ mod tests {
         let legacy = Project::load(&path).unwrap();
         assert_eq!(legacy.version, SCHEMA_VERSION);
         assert!(legacy.markers.is_empty());
+        fs::write(&path, br#"{"version":5,"sample_rate":48000,"tracks":[]}"#).unwrap();
+        assert!(Project::load(&path).unwrap().export_metadata.is_empty());
+        p.export_metadata.title = "Grabación de la tarde".into();
+        p.export_metadata.track = "7".into();
         p.markers.push(Marker {
             name: "Verse 2".into(),
             frame: 144_001,

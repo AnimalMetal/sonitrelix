@@ -1,5 +1,10 @@
 # Validation
 
+## WASAPI loopback in the current preview
+
+- A live engine test recorded 38,400 stereo frames from the named default output, including a generated quiet test tone. Capture advanced before and after the tone.
+- A native app test used Windows default loopback and verified Record, F8, Pause/Resume, Stop, mono WAV insertion and Undo. Project backing remained idle. Both tests used temporary audio files and opened no microphone.
+
 ## Punch-in recording in 0.6.5
 
 The opt-in Windows integration test uses the default WASAPI input and output and a silent backing track. It exercises the native bracket and punch-in commands with a 3-second lead-in and a −25 ms recording offset. It verifies that the microphone capture stops automatically at exactly 14,776 frames, that the two original clip regions and the backing track are unchanged, and that Undo and Redo restore the expected takes. Stopping during the lead-in leaves the project unchanged and creates no additional take. The test deletes its temporary audio.

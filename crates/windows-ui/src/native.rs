@@ -38,7 +38,9 @@ mod updates;
 #[path = "win32.rs"]
 mod w;
 use editing_ui::*;
-use playback::{END, IMPORT, LOOP_SELECTION, PAUSE, PLAY, REPORT, REPORT_LEVELS, START, STOP};
+use playback::{
+    END, IMPORT, LOOP_SELECTION, OPEN_LINK, PAUSE, PLAY, REPORT, REPORT_LEVELS, START, STOP,
+};
 use sonitrelix_session::{Project, parse_time};
 use sonitrelix_settings::Store;
 use std::{
@@ -236,6 +238,7 @@ impl App {
                         ("open", OPEN),
                         ("recent_menu", maintenance::RECENT),
                         ("import_wav", IMPORT),
+                        ("audio_link_menu", OPEN_LINK),
                         ("save", SAVE),
                         ("save_as", SAVE_AS),
                         ("export_audio", export_ui::EXPORT),
@@ -536,19 +539,52 @@ impl App {
         audio: bool,
         title_key: Option<&str>,
     ) -> Option<PathBuf> {
+        unsafe { self.file_dialog(save, audio, title_key, None) }
+    }
+    pub(super) unsafe fn choose_export_path(
+        &self,
+        format: &str,
+        selection_only: bool,
+    ) -> Option<PathBuf> {
+        unsafe {
+            self.file_dialog(
+                true,
+                true,
+                selection_only.then_some("export_selection"),
+                Some(format),
+            )
+        }
+    }
+    unsafe fn file_dialog(
+        &self,
+        save: bool,
+        audio: bool,
+        title_key: Option<&str>,
+        export_format: Option<&str>,
+    ) -> Option<PathBuf> {
         use std::os::windows::ffi::OsStringExt;
         unsafe {
             let mut b = vec![0u16; 32768];
             let plugin = title_key == Some("fx_fastplugs_open");
-            if !plugin
-                && !audio
-                && let Some(p) = &self.path
+            if let Some(p) = &self.path
+                && (!plugin && !audio || export_format.is_some())
             {
+                let proposed;
+                let p = if let Some(extension) = export_format {
+                    proposed = p.with_extension(extension);
+                    &proposed
+                } else {
+                    p
+                };
                 let s: Vec<_> = p.as_os_str().to_string_lossy().encode_utf16().collect();
                 let n = s.len().min(b.len() - 1);
                 b[..n].copy_from_slice(&s[..n]);
             }
-            let filter = wide(if plugin {
+            let export_filter = export_format
+                .map(|ext| format!("{} (*.{ext})\0*.{ext}\0\0", ext.to_ascii_uppercase()));
+            let filter = wide(if let Some(filter) = &export_filter {
+                filter
+            } else if plugin {
                 "CLAP (*.clap)\0*.clap\0\0"
             } else if audio {
                 if save {
@@ -559,7 +595,9 @@ impl App {
             } else {
                 "Sonitrelix (*.sonitrelix)\0*.sonitrelix\0\0"
             });
-            let ext = wide(if plugin {
+            let ext = wide(if let Some(extension) = export_format {
+                extension
+            } else if plugin {
                 "clap"
             } else if audio {
                 "wav"
@@ -605,15 +643,29 @@ impl App {
             }
             let n = b.iter().position(|c| *c == 0).unwrap_or(b.len());
             let mut path = PathBuf::from(std::ffi::OsString::from_wide(&b[..n]));
-            if audio && save {
-                let extension = match o.filter_index {
-                    2 => "flac",
-                    3 => "mp3",
-                    4 => "m4a",
-                    5 => "opus",
-                    _ => "wav",
-                };
+            if let Some(extension) = export_format
+                && !path
+                    .extension()
+                    .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+            {
                 path.set_extension(extension);
+                // The Windows dialog only confirmed overwrite of the name before normalization.
+                if path.exists() {
+                    self.modal.set(true);
+                    let text = self
+                        .t("export_replace_file")
+                        .replace("{path}", &path.to_string_lossy());
+                    let yes = MessageBoxW(
+                        self.hwnd,
+                        wide(&text).as_ptr(),
+                        wide(&self.t("export_options")).as_ptr(),
+                        4 | 0x20 | 0x100,
+                    ) == 6;
+                    self.modal.set(false);
+                    if !yes {
+                        return None;
+                    }
+                }
             }
             Some(path)
         }
@@ -719,9 +771,8 @@ impl App {
                 COPY | CUT | PASTE | DELETE_AUDIO | SELECT_ALL | SPLIT | TRIM | SILENCE
                 | INSERT_SILENCE | ADD_EMPTY | DUPLICATE | MOVE_UP | MOVE_DOWN | RENAME_FOCUS
                 | MARK_START | MARK_END | CLEAR_SELECTION | READ_SELECTION => self.edit_command(id),
-                IMPORT | PLAY | PAUSE | STOP | START | END | REPORT | LOOP_SELECTION => {
-                    self.audio_command(id)
-                }
+                IMPORT | OPEN_LINK | PLAY | PAUSE | STOP | START | END | REPORT
+                | LOOP_SELECTION => self.audio_command(id),
                 timeline_tools::ADD_MARKER
                 | timeline_tools::PREVIOUS_MARKER
                 | timeline_tools::NEXT_MARKER
@@ -1300,6 +1351,7 @@ pub fn run() {
         app.log("startup");
         ShowWindow(app.hwnd, 5);
         SetFocus(GetDlgItem(app.hwnd, 11));
+        app.start_update_schedule();
         if !std::env::args_os().any(|a| a == "--post-update") {
             app.offer_recovery();
             app.offer_update_result();

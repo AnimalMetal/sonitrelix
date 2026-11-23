@@ -16,7 +16,7 @@
 
 ## Editing and storage
 
-Each track is an ordered sequence of source slices and explicit silence. Edits validate a candidate before committing the change to undo history. Frame positions preserve sample boundaries alongside the millisecond fields. The version 5 [project schema](PROJECT_FORMAT.md) stores named markers and references to protected source assets. Imports and recordings remain separate files. Metadata recovery checkpoints are written while the project is dirty.
+Each track is an ordered sequence of source slices and explicit silence. Edits validate a candidate before committing the change to undo history. Frame positions preserve sample boundaries alongside the millisecond fields. The version 6 [project schema](PROJECT_FORMAT.md) stores named markers, export metadata, and references to protected source assets. Imports and recordings remain separate files. Metadata recovery checkpoints are written while the project is dirty.
 
 Effects render bounded blocks to new assets, with preview and undo. Compressed imports decode to WAV in a worker. Playback and export mix tracks on a common timeline, with worker-side resampling. The Win32 app uses Windows Media Foundation and a separate bundled FFmpeg process. See [third-party notices](../THIRD_PARTY_NOTICES.md) and [FFmpeg build details](FFMPEG_BUILD.md).
 

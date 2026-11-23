@@ -69,6 +69,7 @@ pub(super) fn route(
             (0x53, true) => Some(SAVE_AS),
             (0x45, true) => Some(super::export_ui::EXPORT),
             (0x49, false) => Some(IMPORT),
+            (0x55, false) => Some(OPEN_LINK),
             (0xbc, false) => Some(PREFERENCES),
             _ => None,
         };

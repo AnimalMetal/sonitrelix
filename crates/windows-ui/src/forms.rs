@@ -17,12 +17,17 @@ pub(super) enum Field {
         label: String,
         value: String,
     },
+    Check {
+        label: String,
+        checked: bool,
+    },
 }
 struct Form {
     fields: Vec<Field>,
     strings: serde_json::Value,
     slider_access: Option<slider::AccessibleValues>,
     result: Option<Vec<String>>,
+    export: Option<super::export_ui::OptionsDialog>,
 }
 impl Form {
     fn t(&self, k: &str) -> String {
@@ -35,6 +40,9 @@ impl Form {
                 let id = 101 + i as i32 * 2;
                 let control = GetDlgItem(h, id);
                 let value = match field {
+                    Field::Check { .. } => {
+                        Some((SendMessageW(control, 0xf0, 0, 0) == 1).to_string())
+                    }
                     Field::Slider { range, .. } => Some(range.value(control).to_string()),
                     Field::Choice { options, .. } => {
                         let selected = SendMessageW(control, 0x147, 0, 0) as usize;
@@ -57,6 +65,47 @@ impl Form {
             }
             self.result = Some(values);
             DestroyWindow(h);
+        }
+    }
+    unsafe fn configure_export(&mut self, h: HWND) {
+        unsafe {
+            let Some(export) = &self.export else {
+                return;
+            };
+            let choice = SendMessageW(GetDlgItem(h, 101), 0x147, 0, 0) as usize;
+            let Some(&format) = export.formats.get(choice) else {
+                return;
+            };
+            let info = self.t(export_ui::quality_key(format));
+            let choose_rate = GetDlgItem(h, 103);
+            let active = SendMessageW(choose_rate, 0x147, 0, 0) as usize;
+            let previous = export.rates.get(active).copied().unwrap_or(0);
+            let rates = export_ui::rates_for(format);
+            let labels = rates
+                .iter()
+                .map(|rate| export.rate_label(&self.strings, format, *rate))
+                .collect::<Vec<_>>();
+            let index = rates.iter().position(|rate| *rate == previous).unwrap_or(0);
+            let Field::Choice { options, .. } = &mut self.fields[1] else {
+                unreachable!()
+            };
+            *options = labels;
+            self.export.as_mut().unwrap().rates = rates;
+            SendMessageW(choose_rate, 0x14b, 0, 0);
+            for label in options {
+                SendMessageW(choose_rate, 0x143, 0, wide(label).as_ptr() as isize);
+            }
+            SendMessageW(choose_rate, 0x14e, index, 0);
+            for (id, visible) in [
+                (102, format != "opus"),
+                (103, format != "opus"),
+                (106, format == "mp3"),
+                (107, format == "mp3"),
+            ] {
+                ShowWindow(GetDlgItem(h, id), if visible { 5 } else { 0 });
+            }
+            SetWindowTextW(GetDlgItem(h, 920), wide(&info).as_ptr());
+            announcement::announce(GetDlgItem(h, 920), &info);
         }
     }
     unsafe fn slider_message(&self, h: HWND, message: u32, w: usize, l: isize) -> bool {
@@ -103,6 +152,24 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
                 return 0;
             }
             match m {
+                0x111 if w & 0xffff == 101 && w >> 16 == 1 && (*p).export.is_some() => {
+                    (*p).configure_export(h);
+                    return 0;
+                }
+                0x111 if w >> 16 == 0 && w & 0xffff == 3 && (*p).export.is_some() => {
+                    let export = (*p).export.as_ref().unwrap();
+                    let metadata = export.metadata.clone();
+                    let selection_only = export.selection_only;
+                    let strings = (*p).strings.clone();
+                    match super::export_ui::edit_metadata(h, strings, metadata, selection_only) {
+                        Ok(Some(tags)) => (*p).export.as_mut().unwrap().metadata = tags,
+                        Ok(None) => (),
+                        Err(error) => {
+                            SetWindowTextW(GetDlgItem(h, 920), wide(&error).as_ptr());
+                        }
+                    };
+                    return 0;
+                }
                 0x111 if w >> 16 == 0 && w & 0xffff == 1 => {
                     (*p).accept(h);
                     return 0;
@@ -145,6 +212,7 @@ unsafe fn create_dialog(
         let dpi = GetDpiForWindow(owner).max(96) as i32;
         let s = |v| v * dpi / 96;
         let count = form.fields.len() as i32;
+        let row = if count > 5 { 48 } else { 64 };
         let h = CreateWindowExW(
             0x10000,
             class.as_ptr(),
@@ -153,7 +221,7 @@ unsafe fn create_dialog(
             i32::MIN,
             i32::MIN,
             s(620),
-            s(220 + count * 64),
+            s(220 + count * row),
             owner,
             null_mut(),
             instance,
@@ -190,11 +258,17 @@ unsafe fn create_dialog(
         };
         for (i, field) in form.fields.iter().enumerate() {
             let id = 100 + i as i32 * 2;
-            let y = 12 + i as i32 * 64;
+            let y = 12 + i as i32 * row;
+            if let Field::Check { label, checked } = field {
+                let button = create(id + 1, "BUTTON", label, 0x10000 | 3, y + 12, 28, 12, 580);
+                SendMessageW(button, 0xf1, usize::from(*checked), 0);
+                continue;
+            }
             let label = match field {
                 Field::Slider { label, .. }
                 | Field::Text { label, .. }
                 | Field::Choice { label, .. } => label,
+                Field::Check { .. } => unreachable!(),
             };
             create(id, "STATIC", label, 0, y, 20, 12, 580);
             if let Field::Slider { range, value, .. } = field {
@@ -266,7 +340,7 @@ unsafe fn create_dialog(
             "STATIC",
             &form.t("form_status"),
             0,
-            14 + count * 64,
+            14 + count * row,
             20,
             12,
             580,
@@ -276,17 +350,33 @@ unsafe fn create_dialog(
             "EDIT",
             hint,
             0x10000 | 0x800000 | 0x800 | 4 | 0x40 | 0x200000,
-            36 + count * 64,
+            36 + count * row,
             80,
             12,
             580,
         );
+        if form.export.is_some() {
+            create(
+                3,
+                "BUTTON",
+                &form.t("export_metadata_button"),
+                0x10000,
+                124 + count * row,
+                30,
+                12,
+                245,
+            );
+        }
         create(
             1,
             "BUTTON",
-            &form.t("form_ok"),
+            &form.t(if form.export.is_some() {
+                "export_continue"
+            } else {
+                "form_ok"
+            }),
             0x10000 | 1,
-            124 + count * 64,
+            124 + count * row,
             30,
             290,
             145,
@@ -296,7 +386,7 @@ unsafe fn create_dialog(
             "BUTTON",
             &form.t("form_cancel"),
             0x10000,
-            124 + count * 64,
+            124 + count * row,
             30,
             447,
             145,
@@ -313,6 +403,30 @@ pub(super) unsafe fn ask(
     fields: Vec<Field>,
     hint: &str,
 ) -> Result<Option<Vec<String>>, String> {
+    unsafe { run_dialog(owner, strings, title, fields, hint, None).map(|form| form.result) }
+}
+
+pub(super) unsafe fn ask_export(
+    owner: HWND,
+    strings: serde_json::Value,
+    title: &str,
+    fields: Vec<Field>,
+    export: export_ui::OptionsDialog,
+) -> Result<Option<(Vec<String>, export_ui::OptionsDialog)>, String> {
+    unsafe {
+        let form = run_dialog(owner, strings, title, fields, "", Some(export))?;
+        Ok(form.result.zip(form.export))
+    }
+}
+
+unsafe fn run_dialog(
+    owner: HWND,
+    strings: serde_json::Value,
+    title: &str,
+    fields: Vec<Field>,
+    hint: &str,
+    export: Option<export_ui::OptionsDialog>,
+) -> Result<Form, String> {
     unsafe {
         let has_numbers = fields
             .iter()
@@ -325,8 +439,10 @@ pub(super) unsafe fn ask(
             strings,
             slider_access: has_numbers.then(slider::AccessibleValues::new),
             result: None,
+            export,
         });
         let h = create_dialog(owner, &mut form, title, hint)?;
+        form.configure_export(h);
         let focus = GetFocus();
         EnableWindow(owner, 0);
         ShowWindow(h, 5);
@@ -360,7 +476,7 @@ pub(super) unsafe fn ask(
         }
         EnableWindow(owner, 1);
         SetFocus(focus);
-        Ok(form.result.take())
+        Ok(*form)
     }
 }
 fn track_volume_db(gain: f32) -> f32 {
@@ -481,6 +597,86 @@ mod tests {
     use super::*;
 
     #[test]
+    fn export_options_change_visible_fields_and_preserve_the_selected_rate() {
+        unsafe {
+            for es in [false, true] {
+                let strings = load_strings(es);
+                let t = |key: &str| strings[key].as_str().unwrap().to_owned();
+                let mut form = Box::new(Form {
+                    fields: vec![
+                        Field::Choice {
+                            label: t("export_format"),
+                            options: vec!["WAV".into(), "MP3".into(), "Opus".into()],
+                            selected: 0,
+                        },
+                        Field::Choice {
+                            label: t("pref_export_rate"),
+                            options: vec!["48 kHz".into(), "44.1 kHz".into()],
+                            selected: 1,
+                        },
+                        Field::Choice {
+                            label: t("pref_export_channels"),
+                            options: vec![t("pref_mono"), t("pref_stereo")],
+                            selected: 1,
+                        },
+                        Field::Choice {
+                            label: t("pref_export_bitrate"),
+                            options: vec!["192 kbps".into()],
+                            selected: 0,
+                        },
+                        Field::Check {
+                            label: t("export_defaults"),
+                            checked: false,
+                        },
+                    ],
+                    strings: strings.clone(),
+                    slider_access: None,
+                    result: None,
+                    export: Some(export_ui::OptionsDialog {
+                        formats: vec!["wav", "mp3", "opus"],
+                        rates: &[48_000, 44_100],
+                        metadata: Default::default(),
+                        selection_only: false,
+                        project_rate: 48_000,
+                    }),
+                });
+                let h = create_dialog(null_mut(), &mut form, "Export", "").unwrap();
+                let format = GetDlgItem(h, 101);
+                let rate = GetDlgItem(h, 103);
+                let bitrate = GetDlgItem(h, 107);
+                let visible = |control| GetWindowLongPtrW(control, -16) & 0x10000000 != 0;
+                form.configure_export(h);
+                assert!(!visible(bitrate));
+                let set_format = |index| {
+                    SendMessageW(format, 0x14e, index, 0);
+                    SendMessageW(h, 0x111, (1 << 16) | 101, format as isize);
+                };
+                set_format(1);
+                assert!(visible(bitrate));
+                let actual_rate = SendMessageW(rate, 0x147, 0, 0) as usize;
+                assert_eq!(form.export.as_ref().unwrap().rates[actual_rate], 44_100);
+                let (name, role) = accessibility_tests::name_and_role(GetDlgItem(h, 3));
+                assert_eq!(name, t("export_metadata_button").replace('&', ""));
+                assert_eq!(role, 43);
+                set_format(2);
+                assert!(!visible(rate) && !visible(bitrate));
+                assert_eq!(form.export.as_ref().unwrap().rates, &[48_000]);
+                SendMessageW(GetDlgItem(h, 109), 0xf1, 1, 0);
+                ShowWindow(h, 5);
+                SetFocus(format);
+                let mut enter = MSG {
+                    hwnd: format,
+                    message: 0x100,
+                    wParam: 0x0d,
+                    ..MSG::default()
+                };
+                assert_ne!(IsDialogMessageW(h, &mut enter), 0);
+                assert_eq!(form.result.take().unwrap(), ["2", "0", "1", "0", "true"]);
+            }
+        }
+    }
+
+    #[test]
     fn volume_and_pan_sliders_expose_values_and_reset_independently() {
         unsafe {
             slider::initialize().unwrap();
@@ -502,6 +698,7 @@ mod tests {
                 strings: load_strings(false),
                 slider_access: Some(slider::AccessibleValues::new()),
                 result: None,
+                export: None,
             });
             let h = create_dialog(null_mut(), &mut form, "Volume and pan", "").unwrap();
             let volume = GetDlgItem(h, 101);

@@ -77,16 +77,20 @@ struct Response {
     status: u32,
 }
 fn response(url: &str, offset: u64) -> io::Result<Response> {
+    let rest = url
+        .strip_prefix("https://")
+        .ok_or_else(|| bad("Updates require HTTPS"))?;
+    let (host, path) = rest
+        .split_once('/')
+        .ok_or_else(|| bad("Missing HTTPS path"))?;
+    if !["github.com", "api.github.com"].contains(&host) || path.contains(['\r', '\n']) {
+        return Err(bad("Unexpected update origin"));
+    }
+    get(host, 443, &format!("/{path}"), true, offset)
+}
+
+fn get(host: &str, port: u16, path: &str, secure: bool, offset: u64) -> io::Result<Response> {
     unsafe {
-        let rest = url
-            .strip_prefix("https://")
-            .ok_or_else(|| bad("Updates require HTTPS"))?;
-        let (host, path) = rest
-            .split_once('/')
-            .ok_or_else(|| bad("Missing HTTPS path"))?;
-        if !["github.com", "api.github.com"].contains(&host) || path.contains(['\r', '\n']) {
-            return Err(bad("Unexpected update origin"));
-        }
         let session = handle(WinHttpOpen(
             wide(concat!("Sonitrelix/", env!("CARGO_PKG_VERSION"))).as_ptr(),
             4,
@@ -95,15 +99,15 @@ fn response(url: &str, offset: u64) -> io::Result<Response> {
             0,
         ))?;
         check(WinHttpSetTimeouts(session.0, 5000, 5000, 5000, 5000))?;
-        let connection = handle(WinHttpConnect(session.0, wide(host).as_ptr(), 443, 0))?;
+        let connection = handle(WinHttpConnect(session.0, wide(host).as_ptr(), port, 0))?;
         let request = handle(WinHttpOpenRequest(
             connection.0,
             wide("GET").as_ptr(),
-            wide(&format!("/{path}")).as_ptr(),
+            wide(path).as_ptr(),
             std::ptr::null(),
             std::ptr::null(),
             std::ptr::null(),
-            0x800000,
+            if secure { 0x800000 } else { 0 },
         ))?;
         let policy = 1u32;
         check(WinHttpSetOption(
@@ -159,8 +163,9 @@ fn response(url: &str, offset: u64) -> io::Result<Response> {
             .iter()
             .position(|c| *c == 0)
             .unwrap_or(final_url.len());
-        if !String::from_utf16_lossy(&final_url[..end]).starts_with("https://") {
-            return Err(bad("Update redirected outside HTTPS"));
+        let final_url = String::from_utf16_lossy(&final_url[..end]);
+        if !final_url.starts_with("https://") && (secure || !final_url.starts_with("http://")) {
+            return Err(bad("Unexpected download redirect"));
         }
         Ok(Response {
             request,
@@ -168,6 +173,125 @@ fn response(url: &str, offset: u64) -> io::Result<Response> {
             _session: session,
             status,
         })
+    }
+}
+
+fn audio_address(url: &str) -> Option<(&str, u16, String, bool)> {
+    if url.len() > 2048
+        || url
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || c == '\\')
+    {
+        return None;
+    }
+    let (scheme, rest) = url.split_once("://")?;
+    let (secure, default_port) = if scheme.eq_ignore_ascii_case("https") {
+        (true, 443)
+    } else if scheme.eq_ignore_ascii_case("http") {
+        (false, 80)
+    } else {
+        return None;
+    };
+    let rest = rest.split('#').next()?;
+    let end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    let path = &rest[end..];
+    let (host, port) = if let Some(address) = authority.strip_prefix('[') {
+        let (ip, suffix) = address.split_once(']')?;
+        ip.parse::<std::net::Ipv6Addr>().ok()?;
+        (
+            &authority[..ip.len() + 2],
+            if suffix.is_empty() {
+                default_port
+            } else {
+                suffix.strip_prefix(':')?.parse::<u16>().ok()?
+            },
+        )
+    } else {
+        let (host, port) = match authority.split_once(':') {
+            Some((host, port)) => (host, port.parse::<u16>().ok()?),
+            None => (authority, default_port),
+        };
+        if host.is_empty()
+            || !host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".-".contains(&b))
+        {
+            return None;
+        }
+        (host, port)
+    };
+    if port == 0 {
+        return None;
+    }
+    let path = if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("/{path}")
+    };
+    Some((host, port, path, secure))
+}
+
+pub fn valid_audio_url(url: &str) -> bool {
+    audio_address(url).is_some()
+}
+
+/// Fetch a finite media file. Links and their query parameters never become diagnostic messages.
+pub fn download_media(url: &str, file: &mut fs::File, cancel: &AtomicBool) -> io::Result<()> {
+    const MAX_MEDIA: u64 = 512 * 1024 * 1024;
+    if cancel.load(Ordering::Relaxed) {
+        return Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "Download cancelled",
+        ));
+    }
+    let (host, port, path, secure) =
+        audio_address(url).ok_or_else(|| bad("Invalid HTTP audio link"))?;
+    let response = get(host, port, &path, secure, 0)?;
+    if response.status != 200 {
+        return Err(io::Error::other(format!(
+            "Audio download HTTP {}",
+            response.status
+        )));
+    }
+    let mut length = 0;
+    read(&response, cancel, Duration::from_secs(600), |block| {
+        length += block.len() as u64;
+        if length > MAX_MEDIA {
+            return Err(bad("Audio download exceeds 512 MB"));
+        }
+        file.write_all(block)
+    })?;
+    if length == 0 {
+        return Err(bad("The audio link returned an empty file"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn direct_audio_url_preserves_queries_and_validates_authority() {
+        assert_eq!(
+            audio_address("HTTPS://example.com:8443/a.wav?sig=A%2F#fragment"),
+            Some(("example.com", 8443, "/a.wav?sig=A%2F".into(), true))
+        );
+        assert_eq!(
+            audio_address("http://[::1]:8080?audio=1"),
+            Some(("[::1]", 8080, "/?audio=1".into(), false))
+        );
+        for url in [
+            "file:///audio.wav",
+            "https://user:secret@example.com/a.mp3",
+            "https:///x",
+            "http://example.com:0/a",
+            "https://example.com/x\r\ny",
+            "https://example.com/a b",
+        ] {
+            assert!(!valid_audio_url(url), "{url:?}");
+        }
     }
 }
 pub fn fetch(url: &str, limit: usize, cancel: &AtomicBool) -> io::Result<Vec<u8>> {
@@ -198,11 +322,14 @@ fn read(
             if cancel.load(Ordering::Relaxed) {
                 return Err(io::Error::new(
                     io::ErrorKind::Interrupted,
-                    "Update cancelled",
+                    "Download cancelled",
                 ));
             }
             if Instant::now() > deadline {
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "Update timed out"));
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "Download timed out",
+                ));
             }
             let mut n = 0;
             check(WinHttpReadData(

@@ -1,5 +1,7 @@
 use super::*;
-use sonitrelix_engine::recording::{MicrophoneCheck, RecordRequest, Recorded, Recorder};
+use sonitrelix_engine::recording::{
+    MicrophoneCheck, RecordRequest, Recorded, Recorder, loopback_endpoint,
+};
 use sonitrelix_session::{Clip, Media};
 pub(super) const RECORD: usize = 816;
 pub(super) const CHECK_MICROPHONE: usize = 821;
@@ -29,6 +31,89 @@ mod tests {
             (96_001, 145_200..169_201)
         );
         assert_eq!(punch_capture_window(2400, 4812, 48000, 150), (0, 0..2412));
+    }
+
+    #[test]
+    #[ignore = "Records the selected default playback device briefly, without opening a microphone"]
+    fn native_loopback_record_pause_and_stop_creates_a_mono_take() {
+        use std::time::{Duration, Instant, SystemTime};
+        struct Scratch(PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = Scratch(std::env::temp_dir().join(format!("sonitrelix-ui-loopback-{stamp}")));
+        fs::create_dir(&root.0).unwrap();
+        unsafe {
+            let mut app = super::super::tests::native_test_app(&root.0, "SonitrelixLoopbackTest");
+            app.store.settings.devices.input_id =
+                sonitrelix_engine::recording::loopback_selection("");
+            app.store.settings.recording.monitoring = true;
+            app.store.settings.recording.offset_ms = 50;
+            app.project.add_track("Project backing".into());
+            app.project.tracks[0].clips.push(Clip {
+                source: None,
+                source_start: 0,
+                frames: 48_000,
+            });
+            app.project.add_track("System audio".into());
+            app.refresh();
+            SendMessageW(GetDlgItem(app.hwnd, 11), 0x186, 1, 0);
+            app.command(ARM);
+            let before = app.project.clone();
+            app.command(RECORD);
+            let state = app.recording.as_ref().unwrap();
+            assert!(state.loopback && state.backing.is_none());
+            assert_eq!(state.at, 0);
+            let wait_for_frames = |app: &App, target: u64| {
+                let deadline = Instant::now() + Duration::from_secs(6);
+                let recorder = &app.recording.as_ref().unwrap().recorder;
+                while recorder.frames() < target {
+                    if let Some(Err(error)) = recorder.try_result() {
+                        panic!("{error}");
+                    }
+                    assert!(
+                        Instant::now() < deadline,
+                        "System audio frames did not advance"
+                    );
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            };
+            wait_for_frames(&app, 4_800);
+            app.poll_recording();
+            assert!(app.text(23).contains(&app.t("loopback_active")));
+            app.command(REPORT_LEVELS);
+            assert!(app.text(21).contains(&app.t("meter_loopback")));
+            app.command(PAUSE);
+            std::thread::sleep(Duration::from_millis(100));
+            let paused_at = app.recording.as_ref().unwrap().recorder.frames();
+            std::thread::sleep(Duration::from_millis(100));
+            assert_eq!(app.recording.as_ref().unwrap().recorder.frames(), paused_at);
+            app.command(PAUSE);
+            wait_for_frames(&app, paused_at + 4_800);
+            app.command(STOP);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while app.recording.is_some() {
+                assert!(Instant::now() < deadline, "Loopback did not stop");
+                app.poll_recording();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(app.project.tracks[0], before.tracks[0]);
+            let take = app.project.tracks[1].sources().next().unwrap();
+            let info = sonitrelix_audio_io::WavReader::open(&take.path)
+                .unwrap()
+                .info;
+            assert_eq!(info.channels, 1);
+            assert!(info.frames >= 9_600);
+            app.command(UNDO);
+            assert_eq!(app.project, before);
+            DestroyWindow(app.hwnd);
+        }
     }
 
     #[test]
@@ -176,10 +261,32 @@ pub(super) struct Recording {
     stopping: bool,
     clip_announced: bool,
     punch: bool,
-    punch_announced: bool,
+    start_announced: bool,
+    loopback: bool,
     backing_end: Option<u64>,
     pending_take: Option<Recorded>,
     backing: Option<sonitrelix_engine::Engine>,
+}
+impl Recording {
+    fn status_key(&self) -> &'static str {
+        if self.stopping {
+            "record_finishing"
+        } else if self.paused {
+            "record_paused"
+        } else if self.recorder.frames() == 0 {
+            if self.punch {
+                "punch_preroll"
+            } else if self.loopback {
+                "loopback_starting"
+            } else {
+                "record_starting"
+            }
+        } else if self.loopback {
+            "loopback_active"
+        } else {
+            "record_active"
+        }
+    }
 }
 impl App {
     pub(super) unsafe fn record_command(&mut self) {
@@ -203,6 +310,12 @@ impl App {
                 announcement::announce(GetDlgItem(self.hwnd, 21), &message);
                 return;
             }
+            let input_id = self.store.settings.devices.input_id.clone();
+            let loopback = loopback_endpoint(&input_id).is_some();
+            if loopback && punch {
+                self.timeline_feedback(&self.t("loopback_punch"));
+                return;
+            }
             let t = &self.project.tracks[index];
             let rate = if t.clips.is_empty() {
                 self.project.sample_rate
@@ -215,7 +328,11 @@ impl App {
                 return;
             }
             let (start, end) = self.selected_range(index);
-            let offset = self.store.settings.recording.offset_ms;
+            let offset = if loopback {
+                0
+            } else {
+                self.store.settings.recording.offset_ms
+            };
             let (at, play_from, capture_frames) = if punch {
                 if end <= start || self.editor.bracket_start.is_some() {
                     self.timeline_feedback(&self.t("punch_select_range"));
@@ -250,14 +367,16 @@ impl App {
                 .unwrap_or_default()
                 .as_nanos();
             let path = directory.join(format!("recording-{stamp}-{}.wav", std::process::id()));
-            let backing_timeline = if punch {
+            let backing_timeline = if loopback {
+                Ok(None)
+            } else if punch {
                 let mut backing = self.project.clone();
                 let track = &mut backing.tracks[index];
                 track.clips = sonitrelix_editing::pieces(track, 0, start);
                 track.solo = false;
-                sonitrelix_mixer::project(&backing, None)
+                sonitrelix_mixer::project(&backing, None).map(Some)
             } else {
-                sonitrelix_mixer::project(&self.project, Some(index))
+                sonitrelix_mixer::project(&self.project, Some(index)).map(Some)
             };
             let backing_timeline = match backing_timeline {
                 Ok(t) => t,
@@ -267,7 +386,9 @@ impl App {
                 }
             };
             let mut backing = None;
-            let gate = if backing_timeline.info().frames > play_from {
+            let gate = if let Some(backing_timeline) = backing_timeline
+                && backing_timeline.info().frames > play_from
+            {
                 let gate = std::sync::Arc::new(sonitrelix_engine::StartGate::new());
                 let mut engine = match sonitrelix_engine::Engine::new() {
                     Ok(e) => e,
@@ -297,16 +418,12 @@ impl App {
             let request = RecordRequest {
                 gate,
                 path,
-                input_id: self.store.settings.devices.input_id.clone(),
+                input_id,
                 sample_rate: rate,
                 channels,
                 buffer_frames: self.store.settings.recording.buffer_frames,
                 capture_frames,
-                monitoring_output: self
-                    .store
-                    .settings
-                    .recording
-                    .monitoring
+                monitoring_output: (!loopback && self.store.settings.recording.monitoring)
                     .then(|| self.store.settings.devices.output_id.clone()),
             };
             match Recorder::start(request) {
@@ -320,7 +437,8 @@ impl App {
                         stopping: false,
                         clip_announced: false,
                         punch,
-                        punch_announced: false,
+                        start_announced: false,
+                        loopback,
                         backing_end: (punch && offset > 0)
                             .then(|| playback::scale_frame(end, rate, self.project.sample_rate)),
                         pending_take: None,
@@ -328,6 +446,8 @@ impl App {
                     });
                     self.timeline_feedback(&self.t(if punch {
                         "punch_preroll"
+                    } else if loopback {
+                        "loopback_starting"
                     } else {
                         "record_starting"
                     }));
@@ -365,11 +485,7 @@ impl App {
                 if let Some(engine) = &r.backing {
                     engine.pause(r.paused);
                 }
-                let key = if r.paused {
-                    "record_paused"
-                } else {
-                    "record_active"
-                };
+                let key = r.status_key();
                 self.status(&self.t(key));
                 self.record_readout(true);
             }
@@ -396,19 +512,7 @@ impl App {
                 }
                 let text = format!(
                     "{}: {}. {}",
-                    self.t(if r.stopping {
-                        "record_finishing"
-                    } else if r.paused {
-                        "record_paused"
-                    } else if r.recorder.frames() == 0 {
-                        if r.punch {
-                            "punch_preroll"
-                        } else {
-                            "record_starting"
-                        }
-                    } else {
-                        "record_active"
-                    }),
+                    self.t(r.status_key()),
                     self.project.tracks[r.index].name,
                     format_time(sonitrelix_audio_io::frames_to_ms(
                         r.recorder.frames(),
@@ -426,17 +530,7 @@ impl App {
             if let Some(r) = &self.recording {
                 let text = format!(
                     "{}: {}",
-                    self.t(if r.paused {
-                        "record_paused"
-                    } else if r.recorder.frames() == 0 {
-                        if r.punch {
-                            "punch_preroll"
-                        } else {
-                            "record_starting"
-                        }
-                    } else {
-                        "record_active"
-                    }),
+                    self.t(r.status_key()),
                     format_time(sonitrelix_audio_io::frames_to_ms(
                         r.recorder.frames(),
                         r.rate
@@ -462,7 +556,14 @@ impl App {
         };
         let mut levels = vec![];
         if let Some(r) = &self.recording {
-            levels.push(describe("meter_microphone", r.recorder.input_level()));
+            levels.push(describe(
+                if r.loopback {
+                    "meter_loopback"
+                } else {
+                    "meter_microphone"
+                },
+                r.recorder.input_level(),
+            ));
             if let Some(backing) = &r.backing
                 && matches!(
                     backing.snapshot().state,
@@ -475,7 +576,14 @@ impl App {
             }
         } else {
             if let Some(check) = &self.microphone_check {
-                levels.push(describe("meter_microphone", check.level()));
+                levels.push(describe(
+                    if loopback_endpoint(&self.store.settings.devices.input_id).is_some() {
+                        "meter_loopback"
+                    } else {
+                        "meter_microphone"
+                    },
+                    check.level(),
+                ));
             }
             if let Some(level) = self.playback_level() {
                 levels.push(describe("meter_output", level));
@@ -495,8 +603,13 @@ impl App {
         }
     }
     pub(super) fn toggle_microphone_check(&mut self) {
+        let loopback = loopback_endpoint(&self.store.settings.devices.input_id).is_some();
         let key = if self.microphone_check.take().is_some() {
-            "microphone_check_ended"
+            if loopback {
+                "loopback_check_ended"
+            } else {
+                "microphone_check_ended"
+            }
         } else {
             match MicrophoneCheck::start(
                 self.store.settings.devices.input_id.clone(),
@@ -506,7 +619,11 @@ impl App {
             ) {
                 Ok(check) => {
                     self.microphone_check = Some(check);
-                    "microphone_check_started"
+                    if loopback {
+                        "loopback_check_started"
+                    } else {
+                        "microphone_check_started"
+                    }
                 }
                 Err(error) => {
                     self.error_in("microphone check", error);
@@ -527,7 +644,13 @@ impl App {
             self.microphone_check = None;
             match result {
                 Ok(()) => {
-                    let message = self.t("microphone_check_ended");
+                    let message = self.t(
+                        if loopback_endpoint(&self.store.settings.devices.input_id).is_some() {
+                            "loopback_check_ended"
+                        } else {
+                            "microphone_check_ended"
+                        },
+                    );
                     self.announce_recording_status(&message);
                 }
                 Err(error) => self.error_in("microphone check", error),
@@ -602,16 +725,23 @@ impl App {
     pub(super) unsafe fn poll_recording(&mut self) {
         unsafe {
             if let Some(r) = &mut self.recording {
-                let punch_started =
-                    r.punch && !r.punch_announced && r.recorder.frames() > 0 && !r.stopping;
-                r.punch_announced |= punch_started;
+                let announce_start = (r.punch || r.loopback)
+                    && !r.start_announced
+                    && r.recorder.frames() > 0
+                    && !r.stopping;
+                r.start_announced |= announce_start;
+                let loopback = r.loopback;
                 let clipped = r.recorder.input_clipped() && !r.clip_announced;
                 if clipped {
                     r.clip_announced = true;
                 }
                 let monitor_error = r.recorder.try_monitor_error();
-                if punch_started {
-                    self.timeline_feedback(&self.t("record_active"));
+                if announce_start {
+                    self.timeline_feedback(&self.t(if loopback {
+                        "loopback_active"
+                    } else {
+                        "record_active"
+                    }));
                 }
                 if let Some(detail) = monitor_error {
                     self.log_error("microphone monitoring", detail);
@@ -620,7 +750,11 @@ impl App {
                     announcement::announce(GetDlgItem(self.hwnd, 21), &message);
                 }
                 if clipped {
-                    let message = self.t("record_input_clipping");
+                    let message = self.t(if loopback {
+                        "loopback_clipping"
+                    } else {
+                        "record_input_clipping"
+                    });
                     self.status(&message);
                     announcement::announce(GetDlgItem(self.hwnd, 21), &message);
                 }

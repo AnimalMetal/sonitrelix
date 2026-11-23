@@ -3,12 +3,14 @@ use super::*;
 use std::{
     ffi::c_void,
     sync::mpsc::{self, Receiver, TryRecvError},
+    time::{Duration, Instant},
 };
 pub(super) const CHECK: usize = 504;
 pub(super) const INSTALL: usize = 505;
 pub(super) const CANCEL: usize = 506;
 pub(super) const SKIP: usize = 508;
 const LIMIT: usize = 256 * 1024;
+const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Version([u32; 3]);
 impl Version {
@@ -56,7 +58,9 @@ pub(super) struct Checker {
     milestone: u32,
     plan_ready: Option<PathBuf>,
     quiet: bool,
-    next_check: Option<std::time::Instant>,
+    next_check: Option<Instant>,
+    ready: Option<(Report, bool)>,
+    portable: bool,
     skipped: Option<String>,
     state_job: Option<Receiver<Result<String, String>>>,
 }
@@ -568,6 +572,12 @@ impl App {
     }
     pub(super) unsafe fn check_updates(&mut self) {
         unsafe {
+            if let Some((_, quiet)) = &mut self.updates.ready
+                && *quiet
+            {
+                *quiet = false;
+                return;
+            }
             self.start_check(false);
         }
     }
@@ -576,8 +586,8 @@ impl App {
             if self.updates.receiver.is_some() || self.updates.pending() {
                 if !quiet {
                     self.updates.quiet = false;
+                    self.status(&self.t("update_checking"));
                 }
-                self.status(&self.t("update_checking"));
                 return;
             }
             let (tx, rx) = mpsc::channel();
@@ -587,22 +597,17 @@ impl App {
                 .name("github-updates".into())
                 .spawn(move || {
                     let report = check_signed(&root).unwrap_or_else(Report::Error);
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    let _ = sonitrelix_session::atomic_write(
-                        &root.join("data/update-last-check.json"),
-                        &serde_json::to_vec(&now).unwrap(),
-                    );
                     let _ = tx.send(report);
                 }) {
                 Ok(_) => {
                     self.updates.receiver = Some(rx);
-                    if !quiet {
+                    if quiet {
+                        self.log("automatic_update_check_started");
+                    } else {
                         self.status(&self.t("update_checking"));
                     }
                 }
+                Err(e) if quiet => self.log_error("start automatic update check", e),
                 Err(e) => self.error(e),
             }
         }
@@ -617,34 +622,48 @@ impl App {
             if self.updates.pending() {
                 return;
             }
-            if self.updates.quiet
-                && !matches!(
-                    self.playback.state,
-                    sonitrelix_engine::State::Stopped | sonitrelix_engine::State::Ended
-                )
-            {
-                return;
-            }
             let result = self.updates.receiver.as_ref().map(|r| r.try_recv());
             let report = match result {
-                Some(Ok(r)) => r,
-                Some(Err(TryRecvError::Disconnected)) => Report::Error(self.t("update_error")),
-                _ => return,
+                Some(Ok(r)) => Some(r),
+                Some(Err(TryRecvError::Disconnected)) => {
+                    Some(Report::Error(self.t("update_error")))
+                }
+                _ => None,
             };
-            self.updates.receiver = None;
-            if let Report::Error(detail) = &report {
-                self.log_error("check for updates", detail);
+            if let Some(report) = report {
+                self.updates.receiver = None;
+                if let Report::Error(detail) = &report {
+                    self.log_error("check for updates", detail);
+                }
+                self.updates.ready =
+                    if !self.updates.quiet || matches!(report, Report::Available { .. }) {
+                        Some((report, self.updates.quiet))
+                    } else {
+                        None
+                    };
             }
+            let Some((report, quiet)) = &self.updates.ready else {
+                return;
+            };
+            if *quiet
+                && (!self.store.settings.general.automatic_updates
+                    || matches!(report, Report::Available { tag, .. } if self.updates.skipped.as_ref() == Some(tag)))
+            {
+                self.updates.ready = None;
+                return;
+            }
+            if self.recording.is_some()
+                || (*quiet
+                    && (self.preferences.is_some()
+                        || !matches!(
+                            self.playback.state,
+                            sonitrelix_engine::State::Stopped | sonitrelix_engine::State::Ended
+                        )))
+            {
+                return;
+            }
+            let (report, _) = self.updates.ready.take().unwrap();
             self.updates.report = Some(report);
-            if self.updates.quiet && !matches!(self.updates.report, Some(Report::Available { .. }))
-            {
-                return;
-            }
-            if self.updates.quiet
-                && matches!(&self.updates.report,Some(Report::Available{tag,..})if self.updates.skipped.as_ref()==Some(tag))
-            {
-                return;
-            }
             install_text(&mut self.strings, self.updates.report.as_ref());
             if let Some(h) = self.help.as_mut().filter(|h| IsWindow(h.hwnd) != 0) {
                 h.update(self.strings.clone());
@@ -660,49 +679,37 @@ impl App {
     }
 }
 impl App {
+    pub(super) unsafe fn start_update_schedule(&mut self) {
+        unsafe {
+            self.updates.skipped = fs::read(self.data.join("update-skipped.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+            self.updates.portable = self.data.parent().is_some_and(sonitrelix_updater::portable);
+            self.poll_scheduled();
+        }
+    }
     unsafe fn poll_scheduled(&mut self) {
         unsafe {
-            if self.updates.next_check.is_none() {
-                self.updates.skipped = fs::read(self.data.join("update-skipped.json"))
-                    .ok()
-                    .and_then(|b| serde_json::from_slice(&b).ok());
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let last = fs::read(self.data.join("update-last-check.json"))
-                    .ok()
-                    .and_then(|b| serde_json::from_slice::<u64>(&b).ok())
-                    .unwrap_or(0);
-                let delay = if last <= now && now - last < 86400 {
-                    86400 - (now - last)
-                } else {
-                    30
-                };
-                self.updates.next_check =
-                    Some(std::time::Instant::now() + std::time::Duration::from_secs(delay));
-            }
             if self.store.settings.general.automatic_updates
-                && sonitrelix_updater::portable(self.data.parent().unwrap())
-                && self
-                    .updates
-                    .next_check
-                    .is_some_and(|t| std::time::Instant::now() >= t)
-                && self.updates.receiver.is_none()
-                && !self.updates.pending()
-                && matches!(
-                    self.playback.state,
-                    sonitrelix_engine::State::Stopped | sonitrelix_engine::State::Ended
-                )
+                && self.updates.portable
+                && self.updates.claim_automatic_check(Instant::now())
             {
-                self.updates.next_check =
-                    Some(std::time::Instant::now() + std::time::Duration::from_secs(86400));
                 self.start_check(true);
             }
         }
     }
 }
 impl Checker {
+    fn claim_automatic_check(&mut self, now: Instant) -> bool {
+        if self.next_check.is_some_and(|next| now < next)
+            || self.receiver.is_some()
+            || self.pending()
+        {
+            return false;
+        }
+        self.next_check = Some(now + CHECK_INTERVAL);
+        true
+    }
     pub fn pending(&self) -> bool {
         self.install_job.is_some() || self.state_job.is_some()
     }
@@ -791,6 +798,24 @@ fn check_signed(root: &std::path::Path) -> Result<Report, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn automatic_update_checks_start_now_and_repeat_after_24_hours() {
+        let mut checker = Checker::default();
+        let startup = Instant::now();
+        assert!(checker.claim_automatic_check(startup));
+        assert!(!checker.claim_automatic_check(startup));
+        assert!(!checker.claim_automatic_check(startup + CHECK_INTERVAL - Duration::from_secs(1)));
+        let (_send, receive) = mpsc::channel();
+        checker.receiver = Some(receive);
+        let daily = startup + CHECK_INTERVAL;
+        assert!(!checker.claim_automatic_check(daily));
+        checker.receiver = None;
+        assert!(checker.claim_automatic_check(daily));
+        assert!(!checker.claim_automatic_check(daily));
+        assert!(checker.claim_automatic_check(daily + CHECK_INTERVAL));
+        // A new session checks even if the previous session checked immediately beforehand.
+        assert!(Checker::default().claim_automatic_check(startup + Duration::from_secs(1)));
+    }
     #[test]
     fn versions_and_release_boundaries() {
         assert!(Version::parse("v0.10.0").unwrap() > Version::parse("0.9.9").unwrap());

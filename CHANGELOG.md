@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.6
+
+- Portable builds check for updates when they open and every 24 hours while running. The manual Help > Check for updates command is still available.
+- Added per-export settings for the mix and selected excerpts, with an option to save defaults. Title, artist, album, track number, year, genre, and comment can be written to the exported file and reused from the project.
+- Added WASAPI loopback recording from the default Windows output or a named playback device.
+- Added File > Open audio link (Ctrl+U). Direct HTTP and HTTPS audio files import as local tracks that can play while recording.
+
 ## 0.6.5
 
 - Added selection loop playback, named project markers, punch-in recording, clip crossfades, and recording offset calibration.

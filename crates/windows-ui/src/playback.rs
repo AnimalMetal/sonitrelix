@@ -4,6 +4,7 @@ use sonitrelix_engine::{Engine, PlayRequest, State};
 use sonitrelix_session::Media;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 pub(super) const IMPORT: usize = 106;
+pub(super) const OPEN_LINK: usize = 110;
 pub(super) const PLAY: usize = 701;
 pub(super) const PAUSE: usize = 702;
 pub(super) const STOP: usize = 703;
@@ -13,7 +14,210 @@ pub(super) const REPORT: usize = 706;
 pub(super) const REPORT_LEVELS: usize = 707;
 pub(super) const LOOP_SELECTION: usize = 708;
 pub(super) const TIMER: usize = 77;
-type ImportResult = Result<(Media, String, PathBuf), String>;
+type ImportResult = Result<PendingImport, String>;
+struct PendingImport(Option<(Media, String, Option<PathBuf>)>);
+impl PendingImport {
+    fn new(media: Media, name: String, original: Option<PathBuf>) -> Self {
+        Self(Some((media, name, original)))
+    }
+    fn accept(mut self) -> (Media, String, Option<PathBuf>) {
+        self.0.take().expect("pending import has not been accepted")
+    }
+}
+impl Drop for PendingImport {
+    fn drop(&mut self) {
+        if let Some((media, _, original)) = &self.0
+            && original.as_ref() != Some(&media.path)
+        {
+            let _ = fs::remove_file(&media.path);
+        }
+    }
+}
+
+fn imported_media(path: PathBuf, info: sonitrelix_audio_io::WavInfo) -> Media {
+    Media {
+        path,
+        sample_rate: info.sample_rate,
+        channels: info.channels,
+        bits: info.bits,
+        frames: info.frames,
+        float: info.encoding == Encoding::Float,
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+        thread,
+        time::{Duration, Instant, SystemTime},
+    };
+
+    #[test]
+    fn linked_audio_is_cached_and_available_for_the_overdub_mix_after_reopen() {
+        let stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("sonitrelix-link-test-{stamp}"));
+        fs::create_dir(&root).unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let source = root.join("source.wav");
+        let mut writer = sonitrelix_audio_io::WavWriter::create(&source, 48_000, 1).unwrap();
+        writer.write_frames(&[0.25; 4800]).unwrap();
+        writer.finish().unwrap();
+        let audio = fs::read(&source).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut socket = loop {
+                match listener.accept() {
+                    Ok((socket, _)) => break socket,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "WinHTTP did not connect");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("{error}"),
+                }
+            };
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut reader = BufReader::new(&mut socket);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert!(line.starts_with("GET /track.wav?access=local-test "));
+            loop {
+                line.clear();
+                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                    break;
+                }
+            }
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", audio.len()).unwrap();
+            socket.write_all(&audio).unwrap();
+        });
+        unsafe {
+            let mut app = super::super::tests::native_test_app(&root, "SonitrelixAudioLinkTest");
+            app.import_audio_link(format!(
+                "http://127.0.0.1:{port}/track.wav?access=local-test"
+            ));
+            let deadline = Instant::now() + Duration::from_secs(8);
+            while app.import_pending() {
+                assert!(
+                    Instant::now() < deadline,
+                    "Audio link import did not finish"
+                );
+                thread::sleep(Duration::from_millis(10));
+                app.poll_audio();
+            }
+            server.join().unwrap();
+            assert_eq!(app.project.tracks[0].name, app.t("audio_link_track"));
+            assert!(app.project.original_sources.is_empty());
+            let imported = app.project.tracks[0].sources().next().unwrap().path.clone();
+            assert_eq!(imported.parent(), Some(root.join("imports").as_path()));
+            assert_eq!(fs::read_dir(root.join("imports")).unwrap().count(), 1);
+            app.project.add_track("Vocals".into());
+            app.project.tracks[1].armed = true;
+            let path = root.join("mix.sonitrelix");
+            app.project.save(&path).unwrap();
+            let settings = fs::read_to_string(&path).unwrap();
+            assert!(!settings.contains("access=local-test"));
+            let reopened = Project::load(&path).unwrap();
+            let backing = sonitrelix_mixer::project(&reopened, Some(1)).unwrap();
+            assert_eq!(backing.info().frames, 4800);
+            let mut sample = [0.; 2];
+            assert_eq!(
+                sonitrelix_audio_io::TimelineReader::new(backing)
+                    .read_frames(&mut sample)
+                    .unwrap(),
+                1
+            );
+            assert!(sample.iter().all(|v| *v > 0.15));
+            DestroyWindow(app.hwnd);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+fn decode_import(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> std::io::Result<sonitrelix_audio_io::WavInfo> {
+    sonitrelix_audio_io::codecs::decode(source, destination, cancel).or_else(|native_error| {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(native_error);
+        }
+        let _ = fs::remove_file(destination);
+        let exe = sonitrelix_audio_io::ffmpeg::installed().ok_or_else(|| std::io::Error::other(
+            format!("{native_error}. FFmpeg fallback unavailable. Place ffmpeg.exe beside Sonitrelix.exe or install it on PATH.")
+        ))?;
+        sonitrelix_audio_io::ffmpeg::decode(&exe, source, destination, cancel)
+    })
+}
+
+fn import_remote_media(
+    directory: PathBuf,
+    url: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    unreadable: String,
+) -> Result<Media, String> {
+    use std::sync::atomic::Ordering::Relaxed;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let name = format!("linked-{timestamp}-{}", std::process::id());
+    let extension = url
+        .split(['?', '#'])
+        .next()
+        .and_then(|s| s.rsplit_once('.'))
+        .map(|(_, suffix)| suffix.to_ascii_lowercase())
+        .filter(|suffix| {
+            [
+                "wav", "mp3", "flac", "m4a", "aac", "ogg", "opus", "aiff", "aif",
+            ]
+            .contains(&suffix.as_str())
+        })
+        .unwrap_or_else(|| "download".into());
+    let temporary = directory.join(format!("{name}-transfer.{extension}"));
+    let destination = directory.join(format!("{name}.wav"));
+    fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| error.to_string())?;
+    let result = (|| {
+        sonitrelix_updater::http::download_media(url, &mut file, cancel)
+            .map_err(|error| error.to_string())?;
+        drop(file);
+        if cancel.load(Relaxed) {
+            return Err("Download cancelled".into());
+        }
+        let info = if let Ok(info) = WavReader::open(&temporary).map(|reader| reader.info) {
+            if info.frames == 0 {
+                return Err(unreadable);
+            }
+            fs::rename(&temporary, &destination).map_err(|error| error.to_string())?;
+            info
+        } else {
+            decode_import(&temporary, &destination, cancel).map_err(|_| unreadable)?
+        };
+        if cancel.load(Relaxed) {
+            return Err("Audio import cancelled".into());
+        }
+        Ok(imported_media(destination.clone(), info))
+    })();
+    let _ = fs::remove_file(temporary);
+    if result.is_err() {
+        let _ = fs::remove_file(destination);
+    }
+    result
+}
 pub(super) struct Playback {
     engine: Option<Engine>,
     import: Option<Receiver<ImportResult>>,
@@ -87,26 +291,37 @@ impl App {
                             .file_stem()
                             .map(|s| s.to_string_lossy().into_owned())
                             .unwrap_or_else(|| "Audio".into());
-                        let is_recording = name.strip_prefix("recording-")
+                        let is_recording = name
+                            .strip_prefix("recording-")
                             .and_then(|s| s.split_once('-'))
-                            .is_some_and(|(stamp, pid)| stamp.parse::<u128>().is_ok() && pid.parse::<u32>().is_ok())
-                            && path.extension().is_some_and(|s| s.eq_ignore_ascii_case("wav"))
+                            .is_some_and(|(stamp, pid)| {
+                                stamp.parse::<u128>().is_ok() && pid.parse::<u32>().is_ok()
+                            })
+                            && path
+                                .extension()
+                                .is_some_and(|s| s.eq_ignore_ascii_case("wav"))
                             && fs::canonicalize(&recordings).ok().as_deref() == path.parent();
                         let stamp = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_nanos();
-                        let destination = directory.join(format!("import-{stamp}-{}.wav", std::process::id()));
+                        let destination =
+                            directory.join(format!("import-{stamp}-{}.wav", std::process::id()));
                         let recovered = if is_recording {
                             fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-                            sonitrelix_audio_io::recover_pcm16_recording(&path, &destination, &cancel)
-                                .map_err(|e| e.to_string())?
+                            sonitrelix_audio_io::recover_pcm16_recording(
+                                &path,
+                                &destination,
+                                &cancel,
+                            )
+                            .map_err(|e| e.to_string())?
                         } else {
                             None
                         };
-                        let native_wav = if recovered.is_none() && path
-                            .extension()
-                            .is_some_and(|s| s.eq_ignore_ascii_case("wav"))
+                        let native_wav = if recovered.is_none()
+                            && path
+                                .extension()
+                                .is_some_and(|s| s.eq_ignore_ascii_case("wav"))
                         {
                             WavReader::open(&path).ok().map(|r| r.info)
                         } else {
@@ -118,19 +333,7 @@ impl App {
                             (path, info)
                         } else {
                             fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-                            let result = sonitrelix_audio_io::codecs::decode(&path, &destination, &cancel)
-                                .or_else(|native_error| {
-                                    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                                        return Err(native_error);
-                                    }
-                                    let _ = fs::remove_file(&destination);
-                                    match sonitrelix_audio_io::ffmpeg::installed() {
-                                        Some(exe) => sonitrelix_audio_io::ffmpeg::decode(&exe, &path, &destination, &cancel),
-                                        None => Err(std::io::Error::other(format!(
-                                            "{native_error}. FFmpeg fallback unavailable. Place ffmpeg.exe beside Sonitrelix.exe or install it on PATH."
-                                        ))),
-                                    }
-                                });
+                            let result = decode_import(&path, &destination, &cancel);
                             let info = result.map_err(|error| {
                                 let _ = fs::remove_file(&destination);
                                 error.to_string()
@@ -140,24 +343,13 @@ impl App {
                         if info.frames == 0 {
                             return Err("Audio has no frames".into());
                         }
-                        Ok((
-                            Media {
-                                path,
-                                sample_rate: info.sample_rate,
-                                channels: info.channels,
-                                bits: info.bits,
-                                frames: info.frames,
-                                float: info.encoding == Encoding::Float,
-                            },
+                        Ok(PendingImport::new(
+                            imported_media(path, info),
                             name,
-                            original,
+                            Some(original),
                         ))
                     })();
-                    if let Err(mpsc::SendError(Ok((media, _, original)))) = tx.send(result)
-                        && media.path != original
-                    {
-                        let _ = fs::remove_file(media.path);
-                    }
+                    let _ = tx.send(result);
                 }) {
                 Ok(_) => {
                     self.playback.import_selection = self.selected_track();
@@ -166,6 +358,77 @@ impl App {
                     self.status(&self.t("audio_importing"));
                 }
                 Err(e) => self.error(e),
+            }
+        }
+    }
+
+    unsafe fn open_audio_link(&mut self) {
+        unsafe {
+            if self.import_pending() {
+                self.timeline_feedback(&self.t("audio_import_busy"));
+                return;
+            }
+            let mut hint = self.t("audio_link_hint");
+            let mut value = String::new();
+            loop {
+                self.modal.set(true);
+                let result = forms::ask(
+                    self.hwnd,
+                    self.strings.clone(),
+                    &self.t("audio_link_title"),
+                    vec![forms::Field::Text {
+                        label: self.t("audio_link_address"),
+                        value,
+                    }],
+                    &hint,
+                );
+                self.modal.set(false);
+                match result {
+                    Ok(Some(mut values)) => {
+                        value = values.remove(0);
+                        if sonitrelix_updater::http::valid_audio_url(&value) {
+                            self.import_audio_link(value);
+                            return;
+                        }
+                        hint = self.t("audio_link_invalid");
+                    }
+                    Ok(None) => return,
+                    Err(error) => {
+                        self.error(error);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    pub(super) unsafe fn import_audio_link(&mut self, url: String) {
+        unsafe {
+            if self.import_pending() {
+                self.timeline_feedback(&self.t("audio_import_busy"));
+                return;
+            }
+            let (tx, rx) = mpsc::channel();
+            self.playback.import_cancel = Default::default();
+            let cancel = self.playback.import_cancel.clone();
+            let directory = self.data.join("imports");
+            let name = self.t("audio_link_track");
+            let unreadable = self.t("audio_link_unreadable");
+            let worker = std::thread::Builder::new()
+                .name("audio-link-import".into())
+                .spawn(move || {
+                    let result = import_remote_media(directory, &url, &cancel, unreadable)
+                        .map(|media| PendingImport::new(media, name, None));
+                    let _ = tx.send(result);
+                });
+            match worker {
+                Ok(_) => {
+                    self.playback.import_selection = self.selected_track();
+                    self.playback.import_focus = GetFocus();
+                    self.playback.import = Some(rx);
+                    self.timeline_feedback(&self.t("audio_link_downloading"));
+                }
+                Err(error) => self.error(error),
             }
         }
     }
@@ -285,12 +548,7 @@ impl App {
         self.playback
             .import_cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
-        if let Some(receiver) = self.playback.import.take()
-            && let Ok(Ok((media, _, original))) = receiver.try_recv()
-            && media.path != original
-        {
-            let _ = fs::remove_file(media.path);
-        }
+        self.playback.import = None;
     }
     pub(super) fn import_pending(&self) -> bool {
         self.playback.import.is_some()
@@ -408,6 +666,7 @@ impl App {
                 return;
             }
             match id {
+                OPEN_LINK => self.open_audio_link(),
                 IMPORT => {
                     if self.playback.import.is_some() {
                         self.status(&self.t("audio_import_busy"));
@@ -595,6 +854,7 @@ impl App {
             self.poll_maintenance();
             self.poll_microphone_check();
             self.poll_timeline_job();
+            self.poll_updates();
             if self.recording.is_some() {
                 self.poll_recording();
                 if self.recording.is_some() {
@@ -602,17 +862,10 @@ impl App {
                 }
             }
             let mut changed = false;
-            self.poll_updates();
             if self.playback.closing {
                 if let Some(result) = self.playback.import.as_ref().map(Receiver::try_recv) {
                     match result {
-                        Ok(Ok((media, _, original))) => {
-                            self.playback.import = None;
-                            if media.path != original {
-                                let _ = fs::remove_file(media.path);
-                            }
-                        }
-                        Ok(Err(_)) | Err(TryRecvError::Disconnected) => self.playback.import = None,
+                        Ok(_) | Err(TryRecvError::Disconnected) => self.playback.import = None,
                         Err(TryRecvError::Empty) => {}
                     }
                 }
@@ -636,9 +889,12 @@ impl App {
                     Ok(result) => {
                         self.playback.import = None;
                         match result {
-                            Ok((media, name, original)) => {
+                            Ok(pending) => {
+                                let (media, name, original) = pending.accept();
                                 self.checkpoint();
-                                self.project.original_sources.push(original);
+                                if let Some(original) = original {
+                                    self.project.original_sources.push(original);
+                                }
                                 self.project.add_track(name);
                                 self.project
                                     .tracks
@@ -669,7 +925,7 @@ impl App {
                                     self.align_cursor_to_playhead();
                                     self.seek_playback();
                                 }
-                                self.status(&self.t("audio_imported"));
+                                self.timeline_feedback(&self.t("audio_imported"));
                                 self.log("wav_imported");
                             }
                             Err(e) => {
