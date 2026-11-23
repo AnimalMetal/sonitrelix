@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.8
+
+- Added Pitch Shifter to the Ctrl+E effects list in English and Spanish, with a semitone slider and unchanged audio duration.
+- FastPlugs uses native sliders and option lists, groups longer settings lists, and translates effect names, controls and presets into Spanish.
+
 ## 0.6.7
 
 - Included FastPlugs in Windows downloads and signed EXE updates. Effects > FastPlugs opens the effect list without asking for a file.

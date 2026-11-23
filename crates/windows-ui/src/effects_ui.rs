@@ -40,7 +40,7 @@ pub(super) fn effect_timeline(
             .collect(),
     )
 }
-const NAMES: [&str; 15] = [
+const NAMES: [&str; 16] = [
     "fx_amplify",
     "fx_normalize",
     "fx_fade_in",
@@ -56,8 +56,10 @@ const NAMES: [&str; 15] = [
     "fx_dehum",
     "fx_tempo",
     "fx_ducking",
+    "fx_pitch_shift",
 ];
 const DUCKING: isize = 14;
+const PITCH_SHIFT: isize = 15;
 const SLIDER_BASE: i32 = 940;
 const RESET_BASE: i32 = 950;
 #[derive(Clone, Copy)]
@@ -118,6 +120,7 @@ fn parameters(effect: isize) -> &'static [Parameter] {
         12 => const { &[parameter("fx_hum_hz", 60., 50., 60., 10.)] },
         13 => const { &[parameter("fx_tempo_percent", 100., 50., 200., 1.)] },
         DUCKING => const { &[parameter("fx_strength", 70., 0., 100., 1.)] },
+        PITCH_SHIFT => const { &[parameter("fx_pitch_semitones", 0., -24., 24., 0.1)] },
         _ => &[],
     }
 }
@@ -125,6 +128,7 @@ enum EffectChoice {
     Native(Effect),
     Filtered(FilteredEffect, Option<usize>),
     FastPlugs(sonitrelix_effects::fastplugs::Effect),
+    PitchShift(fastplugs_ui::BundleSource, i32),
 }
 type Rendered = Result<(PathBuf, WavInfo), String>;
 struct Context {
@@ -134,6 +138,7 @@ struct Context {
         sonitrelix_effects::fastplugs::Plugin,
         sonitrelix_effects::fastplugs::Effect,
     )>,
+    fastplugs_source: Option<fastplugs_ui::BundleSource>,
     timeline: Timeline,
     selection_start: u64,
     voice_tracks: Vec<(usize, sonitrelix_session::Track)>,
@@ -208,6 +213,7 @@ impl Context {
                 DUCKING if self.voice_tracks.is_empty() => "fx_duck_no_voice",
                 DUCKING => "fx_duck_hint",
                 13 => "fx_tempo_hint",
+                PITCH_SHIFT => "fx_pitch_hint",
                 10 => "fx_noise_hint",
                 11 | 12 => "fx_ffmpeg_hint",
                 _ => "fx_hint",
@@ -257,6 +263,16 @@ impl Context {
                 let control = GetDlgItem(h, SLIDER_BASE + index as i32 * 2 + 1);
                 fields[index].range.value(control) as f32
             };
+            if selected == PITCH_SHIFT {
+                let bundle = self
+                    .fastplugs_source
+                    .clone()
+                    .ok_or_else(|| self.t("fx_pitch_missing"))?;
+                return Ok(EffectChoice::PitchShift(
+                    bundle,
+                    (read(0) * 10.).round() as i32,
+                ));
+            }
             let filtered = match selected {
                 10 => Some(FilteredEffect::NoiseReduction(read(0))),
                 11 => Some(FilteredEffect::DeEsser(read(0))),
@@ -343,6 +359,7 @@ impl Context {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
+            let directory = self.directory.clone();
             let path = self
                 .directory
                 .join(format!("effect-{stamp}-{}.wav", std::process::id()));
@@ -371,6 +388,30 @@ impl Context {
                             EffectChoice::FastPlugs(effect) => crate::fastplugs_helper::render(
                                 effect, timeline, &path, &stop, &progress,
                             )?,
+                            EffectChoice::PitchShift(bundle, tenths) => {
+                                let effect = sonitrelix_effects::fastplugs::Effect {
+                                    bundle: bundle.prepare(&directory)?,
+                                    id: "io.github.masonasons.fastplugs.pitch".into(),
+                                    // FastPlugs takes integer semitones and signed cents.
+                                    changes: vec![
+                                        (
+                                            0,
+                                            sonitrelix_effects::fastplugs::ParameterValue::Number(
+                                                f64::from(tenths / 10),
+                                            ),
+                                        ),
+                                        (
+                                            1,
+                                            sonitrelix_effects::fastplugs::ParameterValue::Number(
+                                                f64::from(tenths % 10 * 10),
+                                            ),
+                                        ),
+                                    ],
+                                };
+                                crate::fastplugs_helper::render(
+                                    effect, timeline, &path, &stop, &progress,
+                                )?
+                            }
                             EffectChoice::Native(effect) => sonitrelix_effects::render(
                                 timeline, effect, &path, &stop, &progress,
                             )?,
@@ -728,7 +769,7 @@ unsafe fn open(owner: HWND, context: &mut Context) -> Result<HWND, String> {
                 GetDlgItem(h, 901),
                 0x143,
                 0,
-                wide(&plugin.name).as_ptr() as isize,
+                wide(fastplugs_ui::effect_name(&context.strings, plugin)).as_ptr() as isize,
             );
         } else {
             for key in NAMES {
@@ -834,6 +875,7 @@ impl App {
                 strings: self.strings.clone(),
                 title,
                 fastplugs,
+                fastplugs_source: self.fastplugs_source(),
                 timeline,
                 selection_start: a,
                 voice_tracks: self
@@ -980,6 +1022,7 @@ mod tests {
                     strings: load_strings(es),
                     title: "Effects".into(),
                     fastplugs: None,
+                    fastplugs_source: None,
                     timeline: Timeline::new(
                         48000,
                         1,
@@ -1066,6 +1109,18 @@ mod tests {
                 SendMessageW(GetDlgItem(h, 901), 0x14e, DUCKING as usize, 0);
                 c.configure(h);
                 assert!(c.effect(h).is_err(), "ducking needs a controlling track");
+                SendMessageW(GetDlgItem(h, 901), 0x14e, PITCH_SHIFT as usize, 0);
+                c.configure(h);
+                assert_eq!(c.effect(h).err().unwrap(), c.t("fx_pitch_missing"));
+                c.fastplugs_source = Some(fastplugs_ui::BundleSource::Embedded);
+                let slider = GetDlgItem(h, 941);
+                let (name, role, value) = accessibility_tests::name_role_value(slider);
+                assert!(name.contains(&c.t("fx_pitch_semitones")));
+                assert_eq!(role, 0x33);
+                assert_eq!(value, "0");
+                SendMessageW(slider, 0x100, 0x25, 0); // Left arrow.
+                assert_eq!(accessibility_tests::name_role_value(slider).2, "-0.1");
+                assert!(matches!(c.effect(h), Ok(EffectChoice::PitchShift(_, -1))));
                 SendMessageW(GetDlgItem(h, 901), 0x14e, 9, 0);
                 c.configure(h);
                 let slider = GetDlgItem(h, 941);

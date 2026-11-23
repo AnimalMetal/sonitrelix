@@ -34,16 +34,25 @@ pub struct Plugin {
 pub struct Parameter {
     pub id: u32,
     pub name: String,
-    pub current: String,
-    pub min: String,
-    pub max: String,
+    pub value: f64,
+    pub default: f64,
+    pub min: f64,
+    pub max: f64,
+    pub choices: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ParameterValue {
+    Number(f64),
+    Text(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Effect {
     pub bundle: PathBuf,
     pub id: String,
-    pub changes: Vec<(u32, String)>,
+    pub changes: Vec<(u32, ParameterValue)>,
 }
 
 fn missing(component: &str) -> io::Error {
@@ -233,6 +242,17 @@ impl Instance<'_> {
                     if let Some(get) = params.get_value {
                         get(self.plugin, info.id, &mut value);
                     }
+                    let choices = if info.flags & CLAP_PARAM_IS_STEPPED != 0
+                        && info.min_value.fract() == 0.
+                        && info.max_value.fract() == 0.
+                        && info.max_value - info.min_value <= 127.
+                    {
+                        (0..=(info.max_value - info.min_value) as u32)
+                            .map(|offset| format(info.min_value + f64::from(offset)))
+                            .collect()
+                    } else {
+                        vec![]
+                    };
                     let name = fixed_text(&info.name);
                     let group = fixed_text(&info.module);
                     let name = if group.is_empty() {
@@ -245,16 +265,18 @@ impl Instance<'_> {
                         Parameter {
                             id: info.id,
                             name,
-                            current: format(value),
-                            min: format(info.min_value),
-                            max: format(info.max_value),
+                            value,
+                            default: info.default_value,
+                            min: info.min_value,
+                            max: info.max_value,
+                            choices,
                         },
                     ))
                 })
                 .collect()
         }
     }
-    fn apply_parameters(&self, changes: &[(u32, String)]) -> io::Result<()> {
+    fn apply_parameters(&self, changes: &[(u32, ParameterValue)]) -> io::Result<()> {
         if changes.is_empty() {
             return Ok(());
         }
@@ -266,27 +288,32 @@ impl Instance<'_> {
             let flush = extension
                 .flush
                 .ok_or_else(|| missing("parameter updates"))?;
-            for (id, text) in changes {
+            for (id, setting) in changes {
                 let Some((info, parameter)) = available.iter().find(|(info, _)| info.id == *id)
                 else {
                     return Err(io::Error::other(
                         "The selected plug-in parameter no longer exists",
                     ));
                 };
-                let label = CString::new(text.as_str()).map_err(io::Error::other)?;
-                let mut value = f64::NAN;
-                if !extension
-                    .text_to_value
-                    .is_some_and(|parse| parse(self.plugin, *id, label.as_ptr(), &mut value))
-                {
-                    value = text.trim().replace(',', ".").parse().unwrap_or(f64::NAN);
-                }
+                let value = match setting {
+                    ParameterValue::Number(value) => *value,
+                    ParameterValue::Text(text) => {
+                        let label = CString::new(text.as_str()).map_err(io::Error::other)?;
+                        let mut value = f64::NAN;
+                        if !extension.text_to_value.is_some_and(|parse| {
+                            parse(self.plugin, *id, label.as_ptr(), &mut value)
+                        }) {
+                            value = text.trim().replace(',', ".").parse().unwrap_or(f64::NAN);
+                        }
+                        value
+                    }
+                };
                 if !value.is_finite() || !(info.min_value..=info.max_value).contains(&value) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!(
                             "{}: {} ({} to {})",
-                            parameter.name, text, parameter.min, parameter.max
+                            parameter.name, value, parameter.min, parameter.max
                         ),
                     ));
                 }

@@ -140,8 +140,11 @@ impl Range {
     }
     pub unsafe fn value(self, handle: HWND) -> f64 {
         let position = unsafe { SendMessageW(handle, GET_POS, 0, 0) };
+        if position == self.ticks() {
+            return self.max;
+        }
         let value = (self.min + position as f64 * self.step).min(self.max);
-        // Decimal steps are deliberately bounded to tenths or integer units.
-        (value * 10.).round() / 10.
+        let precision = if self.step < 0.1 { 100. } else { 10. };
+        (value * precision).round() / precision
     }
 }
