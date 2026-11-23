@@ -25,10 +25,10 @@ See [building](BUILDING.md), [shortcuts](docs/SHORTCUTS.md), [multitrack test wo
 
 ## Español
 
-Sonitrelix 0.6.6 añade repetición de selecciones, marcadores con nombre, grabación sobre un intervalo, fundidos cruzados, calibración del desfase y compatibilidad con FastPlugs instalado por separado. La interfaz y guía F1 están en español e inglés.
+Sonitrelix 0.6.7 incluye FastPlugs en las descargas oficiales y las actualizaciones firmadas. Abra Efectos > FastPlugs para elegir un efecto. La interfaz y la guía F1 están en español e inglés.
 
 Importe música con Ctrl+I, cree pista con Ctrl+Mayús+N, nombre con F2, arme con A y grabe/detenga con R. Use auriculares. Ctrl+G ajusta volumen/panorama, Ctrl+E abre efectos y Ctrl+Mayús+E exporta. Conserve los originales y carpetas de audio de data. F8 anuncia los niveles y la saturación. Pruebe la entrada en Transporte > Probar entrada de grabación y active la monitorización con auriculares si la necesita. El desfase se ajusta manualmente en Preferencias. Siguen pendientes pruebas físicas y con NVDA/JAWS; la accesibilidad no se considera terminada.
 
 ## License
 
-Sonitrelix's original code is MIT licensed. Dependencies retain their own notices.
+Sonitrelix's original code is MIT licensed. Official Windows builds bundled with FastPlugs are distributed under GPLv3. See [third-party notices](THIRD_PARTY_NOTICES.md).
