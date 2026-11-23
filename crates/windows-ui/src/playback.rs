@@ -45,103 +45,6 @@ fn imported_media(path: PathBuf, info: sonitrelix_audio_io::WavInfo) -> Media {
     }
 }
 
-#[cfg(test)]
-mod link_tests {
-    use super::*;
-    use std::{
-        io::{BufRead, BufReader, Write},
-        net::TcpListener,
-        thread,
-        time::{Duration, Instant, SystemTime},
-    };
-
-    #[test]
-    fn linked_audio_is_cached_and_available_for_the_overdub_mix_after_reopen() {
-        let stamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("sonitrelix-link-test-{stamp}"));
-        fs::create_dir(&root).unwrap();
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let port = listener.local_addr().unwrap().port();
-        listener.set_nonblocking(true).unwrap();
-        let source = root.join("source.wav");
-        let mut writer = sonitrelix_audio_io::WavWriter::create(&source, 48_000, 1).unwrap();
-        writer.write_frames(&[0.25; 4800]).unwrap();
-        writer.finish().unwrap();
-        let audio = fs::read(&source).unwrap();
-        let server = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(5);
-            let mut socket = loop {
-                match listener.accept() {
-                    Ok((socket, _)) => break socket,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        assert!(Instant::now() < deadline, "WinHTTP did not connect");
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(error) => panic!("{error}"),
-                }
-            };
-            socket
-                .set_read_timeout(Some(Duration::from_secs(3)))
-                .unwrap();
-            let mut reader = BufReader::new(&mut socket);
-            let mut line = String::new();
-            reader.read_line(&mut line).unwrap();
-            assert!(line.starts_with("GET /track.wav?access=local-test "));
-            loop {
-                line.clear();
-                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
-                    break;
-                }
-            }
-            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", audio.len()).unwrap();
-            socket.write_all(&audio).unwrap();
-        });
-        unsafe {
-            let mut app = super::super::tests::native_test_app(&root, "SonitrelixAudioLinkTest");
-            app.import_audio_link(format!(
-                "http://127.0.0.1:{port}/track.wav?access=local-test"
-            ));
-            let deadline = Instant::now() + Duration::from_secs(8);
-            while app.import_pending() {
-                assert!(
-                    Instant::now() < deadline,
-                    "Audio link import did not finish"
-                );
-                thread::sleep(Duration::from_millis(10));
-                app.poll_audio();
-            }
-            server.join().unwrap();
-            assert_eq!(app.project.tracks[0].name, app.t("audio_link_track"));
-            assert!(app.project.original_sources.is_empty());
-            let imported = app.project.tracks[0].sources().next().unwrap().path.clone();
-            assert_eq!(imported.parent(), Some(root.join("imports").as_path()));
-            assert_eq!(fs::read_dir(root.join("imports")).unwrap().count(), 1);
-            app.project.add_track("Vocals".into());
-            app.project.tracks[1].armed = true;
-            let path = root.join("mix.sonitrelix");
-            app.project.save(&path).unwrap();
-            let settings = fs::read_to_string(&path).unwrap();
-            assert!(!settings.contains("access=local-test"));
-            let reopened = Project::load(&path).unwrap();
-            let backing = sonitrelix_mixer::project(&reopened, Some(1)).unwrap();
-            assert_eq!(backing.info().frames, 4800);
-            let mut sample = [0.; 2];
-            assert_eq!(
-                sonitrelix_audio_io::TimelineReader::new(backing)
-                    .read_frames(&mut sample)
-                    .unwrap(),
-                1
-            );
-            assert!(sample.iter().all(|v| *v > 0.15));
-            DestroyWindow(app.hwnd);
-        }
-        fs::remove_dir_all(root).unwrap();
-    }
-}
-
 fn decode_import(
     source: &std::path::Path,
     destination: &std::path::Path,
@@ -1001,4 +904,101 @@ fn state_key(state: State) -> &'static str {
 
 pub(super) fn project_duration(p: &sonitrelix_session::Project) -> u64 {
     p.tracks.iter().map(track_duration).max().unwrap_or(0)
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+        thread,
+        time::{Duration, Instant, SystemTime},
+    };
+
+    #[test]
+    fn linked_audio_is_cached_and_available_for_the_overdub_mix_after_reopen() {
+        let stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("sonitrelix-link-test-{stamp}"));
+        fs::create_dir(&root).unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let source = root.join("source.wav");
+        let mut writer = sonitrelix_audio_io::WavWriter::create(&source, 48_000, 1).unwrap();
+        writer.write_frames(&[0.25; 4800]).unwrap();
+        writer.finish().unwrap();
+        let audio = fs::read(&source).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut socket = loop {
+                match listener.accept() {
+                    Ok((socket, _)) => break socket,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "WinHTTP did not connect");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("{error}"),
+                }
+            };
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut reader = BufReader::new(&mut socket);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert!(line.starts_with("GET /track.wav?access=local-test "));
+            loop {
+                line.clear();
+                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                    break;
+                }
+            }
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", audio.len()).unwrap();
+            socket.write_all(&audio).unwrap();
+        });
+        unsafe {
+            let mut app = super::super::tests::native_test_app(&root, "SonitrelixAudioLinkTest");
+            app.import_audio_link(format!(
+                "http://127.0.0.1:{port}/track.wav?access=local-test"
+            ));
+            let deadline = Instant::now() + Duration::from_secs(8);
+            while app.import_pending() {
+                assert!(
+                    Instant::now() < deadline,
+                    "Audio link import did not finish"
+                );
+                thread::sleep(Duration::from_millis(10));
+                app.poll_audio();
+            }
+            server.join().unwrap();
+            assert_eq!(app.project.tracks[0].name, app.t("audio_link_track"));
+            assert!(app.project.original_sources.is_empty());
+            let imported = app.project.tracks[0].sources().next().unwrap().path.clone();
+            assert_eq!(imported.parent(), Some(root.join("imports").as_path()));
+            assert_eq!(fs::read_dir(root.join("imports")).unwrap().count(), 1);
+            app.project.add_track("Vocals".into());
+            app.project.tracks[1].armed = true;
+            let path = root.join("mix.sonitrelix");
+            app.project.save(&path).unwrap();
+            let settings = fs::read_to_string(&path).unwrap();
+            assert!(!settings.contains("access=local-test"));
+            let reopened = Project::load(&path).unwrap();
+            let backing = sonitrelix_mixer::project(&reopened, Some(1)).unwrap();
+            assert_eq!(backing.info().frames, 4800);
+            let mut sample = [0.; 2];
+            assert_eq!(
+                sonitrelix_audio_io::TimelineReader::new(backing)
+                    .read_frames(&mut sample)
+                    .unwrap(),
+                1
+            );
+            assert!(sample.iter().all(|v| *v > 0.15));
+            DestroyWindow(app.hwnd);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
 }

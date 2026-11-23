@@ -268,32 +268,6 @@ pub fn download_media(url: &str, file: &mut fs::File, cancel: &AtomicBool) -> io
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn direct_audio_url_preserves_queries_and_validates_authority() {
-        assert_eq!(
-            audio_address("HTTPS://example.com:8443/a.wav?sig=A%2F#fragment"),
-            Some(("example.com", 8443, "/a.wav?sig=A%2F".into(), true))
-        );
-        assert_eq!(
-            audio_address("http://[::1]:8080?audio=1"),
-            Some(("[::1]", 8080, "/?audio=1".into(), false))
-        );
-        for url in [
-            "file:///audio.wav",
-            "https://user:secret@example.com/a.mp3",
-            "https:///x",
-            "http://example.com:0/a",
-            "https://example.com/x\r\ny",
-            "https://example.com/a b",
-        ] {
-            assert!(!valid_audio_url(url), "{url:?}");
-        }
-    }
-}
 pub fn fetch(url: &str, limit: usize, cancel: &AtomicBool) -> io::Result<Vec<u8>> {
     let r = response(url, 0)?;
     if r.status != 200 {
@@ -421,4 +395,31 @@ pub fn download(
         return Err(e);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn direct_audio_url_preserves_queries_and_validates_authority() {
+        assert_eq!(
+            audio_address("HTTPS://example.com:8443/a.wav?sig=A%2F#fragment"),
+            Some(("example.com", 8443, "/a.wav?sig=A%2F".into(), true))
+        );
+        assert_eq!(
+            audio_address("http://[::1]:8080?audio=1"),
+            Some(("[::1]", 8080, "/?audio=1".into(), false))
+        );
+        for url in [
+            "file:///audio.wav",
+            "https://user:secret@example.com/a.mp3",
+            "https:///x",
+            "http://example.com:0/a",
+            "https://example.com/x\r\ny",
+            "https://example.com/a b",
+        ] {
+            assert!(!valid_audio_url(url), "{url:?}");
+        }
+    }
 }

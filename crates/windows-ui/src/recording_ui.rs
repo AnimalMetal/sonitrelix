@@ -20,238 +20,6 @@ fn punch_capture_window(
     (play_from, skip..skip.saturating_add(end - start))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn punch_window_keeps_exact_range_after_preroll_and_offset() {
-        assert_eq!(
-            punch_capture_window(240_001, 264_002, 48000, -25),
-            (96_001, 145_200..169_201)
-        );
-        assert_eq!(punch_capture_window(2400, 4812, 48000, 150), (0, 0..2412));
-    }
-
-    #[test]
-    #[ignore = "Records the selected default playback device briefly, without opening a microphone"]
-    fn native_loopback_record_pause_and_stop_creates_a_mono_take() {
-        use std::time::{Duration, Instant, SystemTime};
-        struct Scratch(PathBuf);
-        impl Drop for Scratch {
-            fn drop(&mut self) {
-                let _ = fs::remove_dir_all(&self.0);
-            }
-        }
-        let stamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = Scratch(std::env::temp_dir().join(format!("sonitrelix-ui-loopback-{stamp}")));
-        fs::create_dir(&root.0).unwrap();
-        unsafe {
-            let mut app = super::super::tests::native_test_app(&root.0, "SonitrelixLoopbackTest");
-            app.store.settings.devices.input_id =
-                sonitrelix_engine::recording::loopback_selection("");
-            app.store.settings.recording.monitoring = true;
-            app.store.settings.recording.offset_ms = 50;
-            app.project.add_track("Project backing".into());
-            app.project.tracks[0].clips.push(Clip {
-                source: None,
-                source_start: 0,
-                frames: 48_000,
-            });
-            app.project.add_track("System audio".into());
-            app.refresh();
-            SendMessageW(GetDlgItem(app.hwnd, 11), 0x186, 1, 0);
-            app.command(ARM);
-            let before = app.project.clone();
-            app.command(RECORD);
-            let state = app.recording.as_ref().unwrap();
-            assert!(state.loopback && state.backing.is_none());
-            assert_eq!(state.at, 0);
-            let wait_for_frames = |app: &App, target: u64| {
-                let deadline = Instant::now() + Duration::from_secs(6);
-                let recorder = &app.recording.as_ref().unwrap().recorder;
-                while recorder.frames() < target {
-                    if let Some(Err(error)) = recorder.try_result() {
-                        panic!("{error}");
-                    }
-                    assert!(
-                        Instant::now() < deadline,
-                        "System audio frames did not advance"
-                    );
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-            };
-            wait_for_frames(&app, 4_800);
-            app.poll_recording();
-            assert!(app.text(23).contains(&app.t("loopback_active")));
-            app.command(REPORT_LEVELS);
-            assert!(app.text(21).contains(&app.t("meter_loopback")));
-            app.command(PAUSE);
-            std::thread::sleep(Duration::from_millis(100));
-            let paused_at = app.recording.as_ref().unwrap().recorder.frames();
-            std::thread::sleep(Duration::from_millis(100));
-            assert_eq!(app.recording.as_ref().unwrap().recorder.frames(), paused_at);
-            app.command(PAUSE);
-            wait_for_frames(&app, paused_at + 4_800);
-            app.command(STOP);
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while app.recording.is_some() {
-                assert!(Instant::now() < deadline, "Loopback did not stop");
-                app.poll_recording();
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            assert_eq!(app.project.tracks[0], before.tracks[0]);
-            let take = app.project.tracks[1].sources().next().unwrap();
-            let info = sonitrelix_audio_io::WavReader::open(&take.path)
-                .unwrap()
-                .info;
-            assert_eq!(info.channels, 1);
-            assert!(info.frames >= 9_600);
-            app.command(UNDO);
-            assert_eq!(app.project, before);
-            DestroyWindow(app.hwnd);
-        }
-    }
-
-    #[test]
-    #[ignore = "Uses the default microphone briefly and a silent backing track; deletes all test audio"]
-    fn native_punch_captures_only_marked_frames_over_backing_and_undo_restores_take() {
-        use sonitrelix_audio_io::{WavReader, WavWriter};
-        use sonitrelix_engine::State;
-        use std::time::{Duration, Instant, SystemTime};
-
-        struct FixtureDirectory(PathBuf);
-        impl Drop for FixtureDirectory {
-            fn drop(&mut self) {
-                fs::remove_dir_all(&self.0).expect("delete temporary punch-in audio");
-            }
-        }
-        let stamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let directory =
-            FixtureDirectory(std::env::temp_dir().join(format!("sonitrelix-punch-test-{stamp}")));
-        fs::create_dir(&directory.0).unwrap();
-        unsafe {
-            let mut app = super::super::tests::native_test_app(&directory.0, "SonitrelixPunchTest");
-            app.store.settings.recording.offset_ms = -25;
-            app.store.settings.recording.buffer_frames = 512;
-            let original = directory.0.join("original.wav");
-            let frames = 192_000;
-            let mut writer = WavWriter::create(&original, 48000, 1).unwrap();
-            writer.write_frames(&vec![0.; frames as usize]).unwrap();
-            let info = writer.finish().unwrap();
-            let original_bytes = fs::read(&original).unwrap();
-            app.project.add_track("Silent backing".into());
-            app.project.tracks[0].clips.push(Clip {
-                source: None,
-                source_start: 0,
-                frames,
-            });
-            app.project.add_track("Take to replace".into());
-            app.project.tracks[1].set_media(Media {
-                path: original.clone(),
-                sample_rate: info.sample_rate,
-                channels: info.channels,
-                frames,
-                bits: info.bits,
-                float: false,
-            });
-            app.refresh();
-            SendMessageW(GetDlgItem(app.hwnd, 11), 0x186, 1, 0);
-            SetFocus(GetDlgItem(app.hwnd, 11));
-            app.command(ARM);
-            let before = app.project.clone();
-            let track = 1;
-            let (start, end) = (144_123, 158_899);
-            app.editor.exact_cursor = Some((track, start));
-            app.command(shortcuts::bracket(b'[' as usize).unwrap());
-            app.editor.exact_cursor = Some((track, end));
-            app.command(shortcuts::bracket(b']' as usize).unwrap());
-            assert_eq!(app.selected_range(track), (start, end));
-
-            let Some(shortcuts::Action::Command(punch)) =
-                shortcuts::route(0x52, true, true, false, shortcuts::Scope::Tracks)
-            else {
-                panic!("Missing Ctrl+Shift+R command");
-            };
-            app.command(punch);
-            assert_eq!(app.text(21), app.t("punch_preroll"));
-            let deadline = Instant::now() + Duration::from_secs(12);
-            let mut heard_preroll = false;
-            let mut backing_during_capture = false;
-            while let Some(recording) = &app.recording {
-                assert!(
-                    Instant::now() < deadline,
-                    "Punch-in did not stop automatically"
-                );
-                let backing = recording.backing.as_ref().unwrap().snapshot();
-                let captured = recording.recorder.frames();
-                assert!(captured <= end - start, "Capture exceeded the selection");
-                heard_preroll |=
-                    backing.state == State::Playing && backing.frame < start && captured == 0;
-                backing_during_capture |= backing.state == State::Playing && captured != 0;
-                app.poll_recording();
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            assert!(heard_preroll && backing_during_capture);
-            assert_eq!(app.project.tracks[0], before.tracks[0]);
-            assert_eq!(app.project.tracks[track].frames(), frames);
-            assert_eq!(app.selected_range(track), (start, end));
-            let clips = &app.project.tracks[track].clips;
-            assert_eq!(clips.len(), 3);
-            assert_eq!((clips[0].source_start, clips[0].frames), (0, start));
-            assert_eq!(
-                (clips[2].source_start, clips[2].frames),
-                (end, frames - end)
-            );
-            assert_eq!(clips[0].source, clips[2].source);
-            assert_eq!(clips[0].source.as_ref().unwrap().path, original);
-            let captured = clips[1].source.as_ref().unwrap();
-            let captured_path = captured.path.clone();
-            assert_ne!(captured_path, original);
-            assert_eq!(clips[1].frames, end - start);
-            assert_eq!(
-                WavReader::open(&captured_path).unwrap().info.frames,
-                end - start
-            );
-            assert_eq!(fs::read(&original).unwrap(), original_bytes);
-
-            let punched = app.project.clone();
-            app.command(UNDO);
-            assert_eq!(app.project, before);
-            app.command(REDO);
-            assert_eq!(app.project, punched);
-            app.command(UNDO);
-            app.command(punch);
-            assert!(app.recording.is_some());
-            app.command(STOP);
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while app.recording.is_some() {
-                assert!(Instant::now() < deadline, "Punch-in did not cancel");
-                app.poll_recording();
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            assert_eq!(app.text(21), app.t("punch_cancelled"));
-            assert_eq!(app.project, before);
-            assert_eq!(
-                fs::read_dir(directory.0.join("recordings"))
-                    .unwrap()
-                    .count(),
-                1
-            );
-            println!(
-                "WASAPI preroll and backing verified; captured {} frames; exact splice, Undo, Redo and pre-roll cancellation passed.",
-                end - start
-            );
-            DestroyWindow(app.hwnd);
-        }
-    }
-}
 pub(super) struct Recording {
     recorder: Recorder,
     index: usize,
@@ -837,6 +605,239 @@ impl App {
             } else {
                 self.record_readout(false);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn punch_window_keeps_exact_range_after_preroll_and_offset() {
+        assert_eq!(
+            punch_capture_window(240_001, 264_002, 48000, -25),
+            (96_001, 145_200..169_201)
+        );
+        assert_eq!(punch_capture_window(2400, 4812, 48000, 150), (0, 0..2412));
+    }
+
+    #[test]
+    #[ignore = "Records the selected default playback device briefly, without opening a microphone"]
+    fn native_loopback_record_pause_and_stop_creates_a_mono_take() {
+        use std::time::{Duration, Instant, SystemTime};
+        struct Scratch(PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = Scratch(std::env::temp_dir().join(format!("sonitrelix-ui-loopback-{stamp}")));
+        fs::create_dir(&root.0).unwrap();
+        unsafe {
+            let mut app = super::super::tests::native_test_app(&root.0, "SonitrelixLoopbackTest");
+            app.store.settings.devices.input_id =
+                sonitrelix_engine::recording::loopback_selection("");
+            app.store.settings.recording.monitoring = true;
+            app.store.settings.recording.offset_ms = 50;
+            app.project.add_track("Project backing".into());
+            app.project.tracks[0].clips.push(Clip {
+                source: None,
+                source_start: 0,
+                frames: 48_000,
+            });
+            app.project.add_track("System audio".into());
+            app.refresh();
+            SendMessageW(GetDlgItem(app.hwnd, 11), 0x186, 1, 0);
+            app.command(ARM);
+            let before = app.project.clone();
+            app.command(RECORD);
+            let state = app.recording.as_ref().unwrap();
+            assert!(state.loopback && state.backing.is_none());
+            assert_eq!(state.at, 0);
+            let wait_for_frames = |app: &App, target: u64| {
+                let deadline = Instant::now() + Duration::from_secs(6);
+                let recorder = &app.recording.as_ref().unwrap().recorder;
+                while recorder.frames() < target {
+                    if let Some(Err(error)) = recorder.try_result() {
+                        panic!("{error}");
+                    }
+                    assert!(
+                        Instant::now() < deadline,
+                        "System audio frames did not advance"
+                    );
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            };
+            wait_for_frames(&app, 4_800);
+            app.poll_recording();
+            assert!(app.text(23).contains(&app.t("loopback_active")));
+            app.command(REPORT_LEVELS);
+            assert!(app.text(21).contains(&app.t("meter_loopback")));
+            app.command(PAUSE);
+            std::thread::sleep(Duration::from_millis(100));
+            let paused_at = app.recording.as_ref().unwrap().recorder.frames();
+            std::thread::sleep(Duration::from_millis(100));
+            assert_eq!(app.recording.as_ref().unwrap().recorder.frames(), paused_at);
+            app.command(PAUSE);
+            wait_for_frames(&app, paused_at + 4_800);
+            app.command(STOP);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while app.recording.is_some() {
+                assert!(Instant::now() < deadline, "Loopback did not stop");
+                app.poll_recording();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(app.project.tracks[0], before.tracks[0]);
+            let take = app.project.tracks[1].sources().next().unwrap();
+            let info = sonitrelix_audio_io::WavReader::open(&take.path)
+                .unwrap()
+                .info;
+            assert_eq!(info.channels, 1);
+            assert!(info.frames >= 9_600);
+            app.command(UNDO);
+            assert_eq!(app.project, before);
+            DestroyWindow(app.hwnd);
+        }
+    }
+
+    #[test]
+    #[ignore = "Uses the default microphone briefly and a silent backing track; deletes all test audio"]
+    fn native_punch_captures_only_marked_frames_over_backing_and_undo_restores_take() {
+        use sonitrelix_audio_io::{WavReader, WavWriter};
+        use sonitrelix_engine::State;
+        use std::time::{Duration, Instant, SystemTime};
+
+        struct FixtureDirectory(PathBuf);
+        impl Drop for FixtureDirectory {
+            fn drop(&mut self) {
+                fs::remove_dir_all(&self.0).expect("delete temporary punch-in audio");
+            }
+        }
+        let stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory =
+            FixtureDirectory(std::env::temp_dir().join(format!("sonitrelix-punch-test-{stamp}")));
+        fs::create_dir(&directory.0).unwrap();
+        unsafe {
+            let mut app = super::super::tests::native_test_app(&directory.0, "SonitrelixPunchTest");
+            app.store.settings.recording.offset_ms = -25;
+            app.store.settings.recording.buffer_frames = 512;
+            let original = directory.0.join("original.wav");
+            let frames = 192_000;
+            let mut writer = WavWriter::create(&original, 48000, 1).unwrap();
+            writer.write_frames(&vec![0.; frames as usize]).unwrap();
+            let info = writer.finish().unwrap();
+            let original_bytes = fs::read(&original).unwrap();
+            app.project.add_track("Silent backing".into());
+            app.project.tracks[0].clips.push(Clip {
+                source: None,
+                source_start: 0,
+                frames,
+            });
+            app.project.add_track("Take to replace".into());
+            app.project.tracks[1].set_media(Media {
+                path: original.clone(),
+                sample_rate: info.sample_rate,
+                channels: info.channels,
+                frames,
+                bits: info.bits,
+                float: false,
+            });
+            app.refresh();
+            SendMessageW(GetDlgItem(app.hwnd, 11), 0x186, 1, 0);
+            SetFocus(GetDlgItem(app.hwnd, 11));
+            app.command(ARM);
+            let before = app.project.clone();
+            let track = 1;
+            let (start, end) = (144_123, 158_899);
+            app.editor.exact_cursor = Some((track, start));
+            app.command(shortcuts::bracket(b'[' as usize).unwrap());
+            app.editor.exact_cursor = Some((track, end));
+            app.command(shortcuts::bracket(b']' as usize).unwrap());
+            assert_eq!(app.selected_range(track), (start, end));
+
+            let Some(shortcuts::Action::Command(punch)) =
+                shortcuts::route(0x52, true, true, false, shortcuts::Scope::Tracks)
+            else {
+                panic!("Missing Ctrl+Shift+R command");
+            };
+            app.command(punch);
+            assert_eq!(app.text(21), app.t("punch_preroll"));
+            let deadline = Instant::now() + Duration::from_secs(12);
+            let mut heard_preroll = false;
+            let mut backing_during_capture = false;
+            while let Some(recording) = &app.recording {
+                assert!(
+                    Instant::now() < deadline,
+                    "Punch-in did not stop automatically"
+                );
+                let backing = recording.backing.as_ref().unwrap().snapshot();
+                let captured = recording.recorder.frames();
+                assert!(captured <= end - start, "Capture exceeded the selection");
+                heard_preroll |=
+                    backing.state == State::Playing && backing.frame < start && captured == 0;
+                backing_during_capture |= backing.state == State::Playing && captured != 0;
+                app.poll_recording();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(heard_preroll && backing_during_capture);
+            assert_eq!(app.project.tracks[0], before.tracks[0]);
+            assert_eq!(app.project.tracks[track].frames(), frames);
+            assert_eq!(app.selected_range(track), (start, end));
+            let clips = &app.project.tracks[track].clips;
+            assert_eq!(clips.len(), 3);
+            assert_eq!((clips[0].source_start, clips[0].frames), (0, start));
+            assert_eq!(
+                (clips[2].source_start, clips[2].frames),
+                (end, frames - end)
+            );
+            assert_eq!(clips[0].source, clips[2].source);
+            assert_eq!(clips[0].source.as_ref().unwrap().path, original);
+            let captured = clips[1].source.as_ref().unwrap();
+            let captured_path = captured.path.clone();
+            assert_ne!(captured_path, original);
+            assert_eq!(clips[1].frames, end - start);
+            assert_eq!(
+                WavReader::open(&captured_path).unwrap().info.frames,
+                end - start
+            );
+            assert_eq!(fs::read(&original).unwrap(), original_bytes);
+
+            let punched = app.project.clone();
+            app.command(UNDO);
+            assert_eq!(app.project, before);
+            app.command(REDO);
+            assert_eq!(app.project, punched);
+            app.command(UNDO);
+            app.command(punch);
+            assert!(app.recording.is_some());
+            app.command(STOP);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while app.recording.is_some() {
+                assert!(Instant::now() < deadline, "Punch-in did not cancel");
+                app.poll_recording();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(app.text(21), app.t("punch_cancelled"));
+            assert_eq!(app.project, before);
+            assert_eq!(
+                fs::read_dir(directory.0.join("recordings"))
+                    .unwrap()
+                    .count(),
+                1
+            );
+            println!(
+                "WASAPI preroll and backing verified; captured {} frames; exact splice, Undo, Redo and pre-roll cancellation passed.",
+                end - start
+            );
+            DestroyWindow(app.hwnd);
         }
     }
 }

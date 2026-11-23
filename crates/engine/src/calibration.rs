@@ -41,7 +41,9 @@ fn burst(index: usize) -> Vec<f32> {
 
 fn measure(audio: &[f32]) -> io::Result<i32> {
     let low: Vec<_> = audio
-        .chunks_exact(DECIMATION)
+        .as_chunks::<DECIMATION>()
+        .0
+        .iter()
         .map(|chunk| chunk.iter().sum::<f32>() / DECIMATION as f32)
         .collect();
     let mut delays = Vec::with_capacity(3);

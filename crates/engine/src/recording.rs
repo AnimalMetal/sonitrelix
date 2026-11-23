@@ -710,15 +710,16 @@ mod tests {
             assert_eq!(reader.read_frames(block).unwrap(), block.len() / 2);
         }
         let peak = samples
-            .chunks_exact(960 * 2)
+            .as_chunks::<{ 960 * 2 }>()
+            .0
+            .iter()
             .map(|block| {
-                let (sine, cosine) =
-                    block
-                        .chunks_exact(2)
-                        .enumerate()
-                        .fold((0., 0.), |(sin, cos), (i, lr)| {
-                            (sin + lr[0] * phase(i).sin(), cos + lr[0] * phase(i).cos())
-                        });
+                let (sine, cosine) = block.as_chunks::<2>().0.iter().enumerate().fold(
+                    (0., 0.),
+                    |(sin, cos), (i, lr)| {
+                        (sin + lr[0] * phase(i).sin(), cos + lr[0] * phase(i).cos())
+                    },
+                );
                 sine.hypot(cosine) * (2. / 960.)
             })
             .fold(0., f32::max);
