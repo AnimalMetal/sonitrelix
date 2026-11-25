@@ -81,7 +81,8 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <p>In the browser, use the contents links or your screen reader’s heading and table shortcuts in browse mode. Ctrl+F finds text. Alt+Tab returns to Sonitrelix.</p>
 <h3 id="window">Understand tracks, clips and focus</h3>
 <dl><dt>Project</dt><dd>The saved arrangement of tracks and references to their audio.</dd><dt>Track</dt><dd>A named sequence of audio clips and silence. Each track has mute, solo, recording-arm, volume and pan settings.</dd><dt>Clip</dt><dd>A region referring to part of a source recording, or an explicit silence region.</dd><dt>Cursor</dt><dd>The position where playback or an edit starts.</dd><dt>Selection</dt><dd>A start and end time defining the audio you want to edit.</dd></dl>
-<p>The main window has menus, transport controls, a Tracks list, a Clips list, editable time fields and readouts. Use Up/Down in a list to choose a track or clip. Most audio shortcuts work only while <strong>Tracks or Clips has focus</strong>. In a text field, Ctrl+A/C/X/V edit text instead of audio.</p>
+<p>In the main window, Tab cycles through <strong>Tracks, Clips and Position</strong>. Shift+Tab goes back. Use Up/Down in a list to choose a track or clip. Use the menus for other commands, or press F6 for the transport readout, F7 for the selection and F8 for audio levels. Most audio shortcuts work while Tracks or Clips has focus. In a text field, Ctrl+A/C/X/V edit text instead of audio.</p>
+<p>Press the <kbd>Application key</kbd> or <kbd>Shift+F10</kbd> in Tracks, Clips or Position for commands related to that control. Use Up and Down to browse, Enter to choose, or Escape to close the menu and return to the same control. In Clips, Cut and Copy use the current audio selection. Choose Select whole clip to mark the focused clip first.</p>
 <h3 id="devices">Choose your microphone and headphones</h3>
 <ol><li>Press <kbd>Ctrl+,</kbd> to open Tools &gt; Preferences.</li><li>Use Ctrl+Tab to reach <strong>Audio devices</strong>.</li><li>Select the input microphone and output device independently. Use the refresh control after connecting a device.</li><li>In <strong>Recording / playback</strong>, choose recording channels and buffering. Match mono/stereo to an existing track you plan to record into.</li><li>Choose Apply to save while keeping Preferences open, or OK to save and close. Cancel discards changes you have not applied.</li></ol>
 <p>Use headphones when recording over music. You can hear the backing track during recording. To hear your microphone too, enable Monitor microphone while recording under Recording / playback. Monitoring starts off and does not change the recorded level.</p>
@@ -97,8 +98,8 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 
 <section aria-labelledby="editing"><h2 id="editing">2. Beginner: edit and save audio</h2>
 <h3 id="time-selection">Set a cursor or selection precisely</h3>
-<p>The time format is <code>hours:minutes:seconds.milliseconds</code>. For example, <code>00:01:15.000</code> is 1 minute 15 seconds. Select the track, Tab to Position or the selection start/end fields, enter the desired values, then activate <strong>Apply times</strong>.</p>
-<p>To select from 1 minute 15 seconds to 1 minute 28.5 seconds, enter <code>00:01:15.000</code> and <code>00:01:28.500</code>. Press F7 to focus the selection readout. Return focus to Tracks/Clips before using audio-editing shortcuts.</p>
+<p>The time format is <code>hours:minutes:seconds.milliseconds</code>. To move the cursor, Tab to <strong>Position</strong>, enter a time such as <code>00:01:15.000</code>, then press Enter.</p>
+<p>To set an exact range, press <kbd>F7</kbd> to read the selection and <kbd>Enter</kbd> to open <strong>Set selection times</strong>. For example, enter <code>00:01:15.000</code> for Start and <code>00:01:28.500</code> for End, then choose Apply. Escape from the readout returns to where you were. The same dialog is available from the Edit menu.</p>
 <p>Alternatively, move with Left/Right; hold Shift to extend a selection. Ctrl uses the larger step. Configure the step sizes in Preferences. Enter on a clip selects that entire clip with exact sample boundaries. Escape in Tracks/Clips clears the audio selection.</p>
 <p>With Tracks or Clips focused, press <kbd>[</kbd> at the start. Move or let playback reach the end, then press <kbd>]</kbd>. Both marks use the current playhead during playback. Press F7 to read the range, then return focus to Tracks or Clips. Ctrl+E opens Effects for the range, Delete removes it, and Ctrl+Shift+X exports it.</p>
 <h3 id="cut-copy">Copy, cut, paste and delete</h3>
@@ -206,9 +207,12 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <tr><th scope="row" data-key="F11">F11</th><td>Jump to the next marker and announce its name and time.</td></tr>
 <tr><th scope="row" data-key="Ctrl+M">Ctrl+M</th><td>Add a named marker at the cursor from Tracks or Clips.</td></tr>
 <tr><th scope="row" data-key="F6">F6</th><td>Focus the transport snapshot.</td></tr>
-<tr><th scope="row" data-key="F7">F7</th><td>Focus the selection readout.</td></tr>
+<tr><th scope="row" data-key="Shift+F6">Shift+F6</th><td>Read the latest status message.</td></tr>
+<tr><th scope="row" data-key="F7">F7</th><td>Focus the selection readout. Enter edits its times. Escape returns to the previous editing control.</td></tr>
 <tr><th scope="row" data-key="F8">F8</th><td>Report microphone and playback peak levels and clipping.</td></tr>
-<tr><th scope="row">Tab / Shift+Tab</th><td>Next / previous control.</td></tr>
+<tr><th scope="row">Tab / Shift+Tab</th><td>Cycle through Tracks, Clips and Position in the main window.</td></tr>
+<tr><th scope="row" data-key="Application key / Shift+F10">Application key / Shift+F10</th><td>Open the context menu for Tracks, Clips or Position.</td></tr>
+<tr><th scope="row">Enter in Position</th><td>Move to the time entered.</td></tr>
 <tr><th scope="row">Up / Down</th><td>Choose a track or clip in the focused list.</td></tr>
 <tr><th scope="row">Alt+F4</th><td>Standard Windows close-window command; prompts for unsaved work when appropriate.</td></tr>
 </tbody></table>

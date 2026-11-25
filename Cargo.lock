@@ -155,25 +155,25 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sonitrelix-audio-io"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "windows",
 ]
 
 [[package]]
 name = "sonitrelix-devices"
-version = "0.6.8"
+version = "0.6.9"
 
 [[package]]
 name = "sonitrelix-editing"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "sonitrelix-session",
 ]
 
 [[package]]
 name = "sonitrelix-effects"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "clap-sys",
  "libloading",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-engine"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "sonitrelix-audio-io",
  "sonitrelix-devices",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-mixer"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "sonitrelix-audio-io",
  "sonitrelix-session",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-session"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "serde",
  "serde_json",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-settings"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "serde",
  "serde_json",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-updater"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "openssl-sys",
  "serde",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "sonitrelix-windows-ui"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "serde",
  "serde_json",

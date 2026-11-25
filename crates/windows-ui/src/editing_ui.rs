@@ -18,6 +18,7 @@ pub(super) const CLEAR_SELECTION: usize = 815;
 pub(super) const READ_SELECTION: usize = 817;
 pub(super) const MARK_START: usize = 818;
 pub(super) const MARK_END: usize = 819;
+pub(super) const EDIT_SELECTION: usize = 820;
 #[derive(Default)]
 pub(super) struct Editor {
     pub clipboard: Option<edit::Clipboard>,
@@ -25,6 +26,7 @@ pub(super) struct Editor {
     pub exact_selection: Option<(usize, u64, u64)>,
     pub exact_cursor: Option<(usize, u64)>,
     pub bracket_start: Option<(usize, u64)>,
+    selection_return: Option<i32>,
 }
 #[derive(Clone)]
 pub(super) struct History {
@@ -75,6 +77,7 @@ impl App {
                     wide(&format_time(value)).as_ptr(),
                 );
             }
+            self.update_selection_readout();
         }
     }
     pub(super) unsafe fn refresh_clips(&self) {
@@ -176,23 +179,105 @@ impl App {
             self.selection_status();
         }
     }
+    fn selection_summary(&self) -> String {
+        let mut text = format!(
+            "{} {} — {} ({} ms)",
+            self.t("selection"),
+            format_time(self.selection.0),
+            format_time(self.selection.1),
+            self.selection.1.saturating_sub(self.selection.0)
+        );
+        if let Some((_, a, b)) = self.editor.exact_selection {
+            text.push_str(&format!(
+                "; {} {}",
+                b.saturating_sub(a),
+                self.t("sample_frames")
+            ));
+        }
+        text
+    }
     pub(super) unsafe fn selection_status(&self) {
         unsafe {
-            let mut text = format!(
-                "{} {} — {} ({} ms)",
-                self.t("selection"),
-                format_time(self.selection.0),
-                format_time(self.selection.1),
-                self.selection.1.saturating_sub(self.selection.0)
-            );
-            if let Some((_, a, b)) = self.editor.exact_selection {
-                text.push_str(&format!(
-                    "; {} {}",
-                    b.saturating_sub(a),
-                    self.t("sample_frames")
-                ));
+            self.status(&self.selection_summary());
+        }
+    }
+    pub(super) unsafe fn update_selection_readout(&self) {
+        unsafe {
+            let readout = GetDlgItem(self.hwnd, SELECTION_READOUT);
+            let text = if self.selection.0 < self.selection.1 {
+                self.selection_summary()
+            } else {
+                self.t("selection_readout_empty")
+            };
+            if self.text(SELECTION_READOUT) != text {
+                SetWindowTextW(readout, wide(&text).as_ptr());
             }
-            self.status(&text);
+        }
+    }
+    pub(super) unsafe fn leave_selection_readout(&mut self) {
+        unsafe {
+            let id = self.editor.selection_return.take().unwrap_or(11);
+            SetFocus(GetDlgItem(self.hwnd, id));
+        }
+    }
+    unsafe fn edit_selection_times(&mut self) {
+        unsafe {
+            let from_readout = GetFocus() == GetDlgItem(self.hwnd, SELECTION_READOUT);
+            let mut times = [format_time(self.selection.0), format_time(self.selection.1)];
+            let selected = loop {
+                self.modal.set(true);
+                let values = forms::ask_apply(
+                    self.hwnd,
+                    self.strings.clone(),
+                    &self.t("edit_selection_title"),
+                    vec![
+                        forms::Field::Text {
+                            label: self.t("start"),
+                            value: times[0].clone(),
+                        },
+                        forms::Field::Text {
+                            label: self.t("end"),
+                            value: times[1].clone(),
+                        },
+                    ],
+                    &self.t("edit_selection_hint"),
+                );
+                self.modal.set(false);
+                match values {
+                    Ok(Some(values)) => {
+                        times = [values[0].clone(), values[1].clone()];
+                        match (parse_time(&times[0]), parse_time(&times[1])) {
+                            (Some(start), Some(end)) if end >= start => {
+                                break Some((start, end));
+                            }
+                            _ => self.error(self.t("invalid_time")),
+                        }
+                    }
+                    Ok(None) => break None,
+                    Err(error) => {
+                        self.error(error);
+                        break None;
+                    }
+                }
+            };
+            if from_readout {
+                self.leave_selection_readout();
+            }
+            if let Some((start, end)) = selected {
+                self.set_selection_times(start, end);
+            }
+        }
+    }
+    unsafe fn set_selection_times(&mut self, start: u64, end: u64) {
+        unsafe {
+            if self.selection != (start, end) || self.editor.bracket_start.is_some() {
+                self.selection = (start, end);
+                self.selection_anchor = None;
+                self.editor.exact_selection = None;
+                self.editor.bracket_start = None;
+                self.sync_times();
+            }
+            self.timeline_feedback(&self.selection_summary());
         }
     }
     pub(super) fn selected_range(&self, index: usize) -> (u64, u64) {
@@ -335,8 +420,22 @@ impl App {
                 return;
             }
             if id == READ_SELECTION {
-                self.selection_status();
-                SetFocus(GetDlgItem(self.hwnd, 21));
+                let id = GetDlgCtrlID(focus);
+                if [11, 25, 15].contains(&id) {
+                    self.editor.selection_return = Some(id);
+                }
+                self.update_selection_readout();
+                let readout = GetDlgItem(self.hwnd, SELECTION_READOUT);
+                if focus == readout {
+                    announcement::announce(readout, &self.text(SELECTION_READOUT));
+                } else {
+                    SetFocus(readout);
+                    SendMessageW(readout, 0xb1, 0, -1);
+                }
+                return;
+            }
+            if id == EDIT_SELECTION {
+                self.edit_selection_times();
                 return;
             }
             if id == CLEAR_SELECTION {

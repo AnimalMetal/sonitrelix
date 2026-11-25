@@ -1,6 +1,6 @@
 # Sonitrelix
 
-Original Rust, Windows-native audio editor with English/Spanish interfaces. **Current Windows release: 0.6.8.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
+Original Rust, Windows-native audio editor with English/Spanish interfaces. **Current Windows release: 0.6.9.** Testing with NVDA and JAWS and physical overdub alignment checks are pending.
 
 Download `Sonitrelix-windows-x64.zip`, extract the whole folder and open `Sonitrelix.exe`. FastPlugs, FFmpeg and the required Visual C++ runtime files are included. Press F1 for the user guide. Ctrl+U imports direct audio links. Recording input includes WASAPI loopback for capturing system sound. Export options include format, quality and file tags. [Windows downloads](https://github.com/AnimalMetal/sonitrelix/releases)
 
@@ -25,7 +25,7 @@ See [building](BUILDING.md), [shortcuts](docs/SHORTCUTS.md), [multitrack test wo
 
 ## Español
 
-Sonitrelix 0.6.8 añade Cambio de tono a Ctrl+E y simplifica los ajustes de FastPlugs con deslizadores y listas en español. Abra Efectos > FastPlugs para elegir un efecto. La interfaz y la guía F1 están en español e inglés.
+Sonitrelix 0.6.9 simplifica la navegación con Tab entre Pistas, Fragmentos y Posición. La tecla Aplicaciones o Mayús+F10 abre el menú contextual. Pulse F7 e Intro para fijar los tiempos de selección. La interfaz y la guía F1 están en español e inglés.
 
 Importe música con Ctrl+I, cree pista con Ctrl+Mayús+N, nombre con F2, arme con A y grabe/detenga con R. Use auriculares. Ctrl+G ajusta volumen/panorama, Ctrl+E abre efectos y Ctrl+Mayús+E exporta. Conserve los originales y carpetas de audio de data. F8 anuncia los niveles y la saturación. Pruebe la entrada en Transporte > Probar entrada de grabación y active la monitorización con auriculares si la necesita. El desfase se ajusta manualmente en Preferencias. Siguen pendientes pruebas físicas y con NVDA/JAWS; la accesibilidad no se considera terminada.
 

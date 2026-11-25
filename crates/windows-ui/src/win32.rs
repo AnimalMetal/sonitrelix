@@ -157,7 +157,7 @@ unsafe extern "system" {
     pub fn TranslateMessage(m: *const MSG) -> i32;
     pub fn DispatchMessageW(m: *const MSG) -> isize;
     pub fn IsDialogMessageW(h: HWND, m: *mut MSG) -> i32;
-    fn GetNextDlgTabItem(dialog: HWND, current: HWND, previous: i32) -> HWND;
+    pub fn GetNextDlgTabItem(dialog: HWND, current: HWND, previous: i32) -> HWND;
     pub fn PostQuitMessage(code: i32);
     pub fn SetWindowLongPtrW(h: HWND, index: i32, v: isize) -> isize;
     pub fn GetWindowLongPtrW(h: HWND, index: i32) -> isize;
@@ -169,6 +169,17 @@ unsafe extern "system" {
     pub fn CreateMenu() -> HMENU;
     pub fn CreatePopupMenu() -> HMENU;
     pub fn AppendMenuW(h: HMENU, flags: u32, id: usize, t: *const u16) -> i32;
+    pub fn TrackPopupMenu(
+        h: HMENU,
+        flags: u32,
+        x: i32,
+        y: i32,
+        reserved: i32,
+        owner: HWND,
+        exclude: *const RECT,
+    ) -> u32;
+    pub fn GetWindowRect(h: HWND, r: *mut RECT) -> i32;
+    pub fn ClientToScreen(h: HWND, point: *mut POINT) -> i32;
     pub fn SetMenu(h: HWND, m: HMENU) -> i32;
     pub fn GetMenu(h: HWND) -> HMENU;
     pub fn DestroyMenu(h: HMENU) -> i32;

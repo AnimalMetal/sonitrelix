@@ -1,4 +1,4 @@
-# Keyboard shortcuts / Atajos — 0.6.6
+# Keyboard shortcuts / Atajos
 
 Audio and track commands act on the selected track when **Tracks or Clips has focus**. In text fields, ordinary typing and Ctrl+A/C/X/V/Z keep Windows text-editing behavior. Ctrl+A never selects all tracks. The clipboard stores Sonitrelix clips internally; it is not the Windows audio clipboard.
 
@@ -14,12 +14,16 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | F9 / F11 | Jump to the previous or next named marker | Ir al marcador anterior o siguiente |
 | Ctrl+M | Name a marker at the cursor | Nombrar un marcador en el cursor |
 | Ctrl+E | Effects on selection or whole track, from Tracks/Clips | Efectos en selección o pista, desde Pistas/Fragmentos |
-| F6 / F7 | Focus transport snapshot / selection | Enfocar transporte / selección |
+| F6 / F7 | Focus transport snapshot / selection readout | Enfocar transporte / lectura de selección |
+| Shift+F6 | Read the latest status message | Leer el último mensaje de estado |
+| F7, then Enter | Enter exact selection start and end | Fijar el inicio y el final exactos de la selección |
 | F8 | Report microphone and playback peaks and clipping | Anunciar picos de entrada y reproducción y saturación |
 | Ctrl+Z / Ctrl+Y | Undo / redo outside text fields | Deshacer / rehacer fuera de texto |
 | Ctrl+Shift+N | New empty track | Nueva pista vacía |
 | Up / Down | Select track or clip in focused list | Elegir pista o fragmento |
-| Tab / Shift+Tab | Next / previous control | Control siguiente / anterior |
+| Tab / Shift+Tab | Cycle through Tracks, Clips and Position | Recorrer Pistas, Fragmentos y Posición |
+| Application key / Shift+F10 | Open the context menu for Tracks, Clips or Position | Abrir el menú contextual de Pistas, Fragmentos o Posición |
+| Enter in Position | Move to the entered time | Ir al tiempo escrito en Posición |
 | Ctrl+A | Select all audio on this track | Seleccionar todo el audio de esta pista |
 | `[` / `]` | Mark the selection start / end at the cursor or playhead | Marcar inicio / fin de selección en el cursor de reproducción |
 | Ctrl+Shift+X | Export the selected range of this track | Exportar el intervalo seleccionado de esta pista |
@@ -51,7 +55,7 @@ Audio and track commands act on the selected track when **Tracks or Clips has fo
 | Space | Play/stop project mix; stop recording if active | Reproducir/detener; detener grabación activa |
 | Ctrl+Space | Pause/resume playback or recording | Pausar/continuar reproducción o grabación |
 
-Space/Ctrl+Space also work in the F6 transport readout. Use named transport buttons from elsewhere. Track letters never trigger while typing a name or a time. Enter in Clips selects the whole clip, retaining exact sample boundaries.
+Space/Ctrl+Space also work in the F6 transport readout. Use the Transport menu for playback and recording commands from elsewhere. Track letters never trigger while typing a name or a time. Enter in Clips selects the whole clip, retaining exact sample boundaries.
 
 Preferences: Ctrl+Tab / Ctrl+Shift+Tab changes category, Tab traverses controls, Escape cancels. F1 / Ctrl+H opens category help. Guide: Ctrl+F focuses Find; F3 finds next; Enter searches from Find or opens a selected section; Escape closes.
 

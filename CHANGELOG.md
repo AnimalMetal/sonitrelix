@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.9
+
+- Main-window Tab navigation cycles through Tracks, Clips and Position. F7 followed by Enter opens exact selection times.
+- The Application key and Shift+F10 open context menus for Tracks, Clips and Position.
+- Enter applies the time in Position. F6 reads the transport and Shift+F6 reads the latest status.
+
 ## 0.6.8
 
 - Added Pitch Shifter to the Ctrl+E effects list in English and Spanish, with a semitone slider and unchanged audio duration.

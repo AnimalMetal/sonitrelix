@@ -3,6 +3,8 @@
 mod accessibility_tests;
 #[path = "announcement.rs"]
 mod announcement;
+#[path = "context_menu.rs"]
+mod context_menu;
 #[path = "diagnostics.rs"]
 mod diagnostics;
 #[path = "editing_ui.rs"]
@@ -67,6 +69,7 @@ const VOLUME_UP: usize = 208;
 const VOLUME_DOWN: usize = 209;
 const PAN_LEFT: usize = 210;
 const PAN_RIGHT: usize = 211;
+const ADD_NAMED: usize = 212;
 const UNDO: usize = 301;
 const REDO: usize = 302;
 const PREFERENCES: usize = 404;
@@ -75,6 +78,9 @@ const ABOUT: usize = 502;
 const CHANGELOG: usize = 503;
 const LICENSES: usize = 507;
 const APPLY: usize = 601;
+const SET_POSITION: usize = 602;
+const REPORT_STATUS: usize = 603;
+const SELECTION_READOUT: i32 = 27;
 struct App {
     hwnd: HWND,
     project: Project,
@@ -200,35 +206,38 @@ impl App {
                 0x00800000 | 0x00200000 | 0x00010000 | 0x1 | 0x100,
             );
             self.child("STATIC", &self.t("name"), 12, 0);
-            self.child("EDIT", "", 13, 0x00800000 | 0x10000 | 0x80);
-            self.child("BUTTON", &self.t("add"), ADD, 0x10000);
+            self.child("EDIT", "", 13, 0x00800000 | 0x80);
+            self.child("BUTTON", &self.t("add"), ADD, 0);
             for (key, id) in [
                 ("play_button", PLAY),
                 ("pause_button", PAUSE),
                 ("stop_button", STOP),
                 ("record_button", recording_ui::RECORD),
             ] {
-                self.child("BUTTON", &self.t(key), id, 0x10000);
+                self.child("BUTTON", &self.t(key), id, 0);
             }
             self.child("STATIC", &self.t("audio_position"), 22, 0);
             self.child(
                 "EDIT",
                 &self.t("audio_stopped"),
                 23,
-                0x00800000 | 0x10000 | 0x800 | 0x80,
+                0x00800000 | 0x800 | 0x80,
+            );
+            self.child("STATIC", &self.t("selection_readout_label"), 26, 0);
+            self.child(
+                "EDIT",
+                &self.t("selection_readout_empty"),
+                SELECTION_READOUT as usize,
+                0x00800000 | 0x800 | 0x80,
             );
             for (label, id) in [("position", 14), ("start", 16), ("end", 18)] {
                 self.child("STATIC", &self.t(label), id, 0);
-                self.child("EDIT", "00:00:00.000", id + 1, 0x00800000 | 0x10000 | 0x80);
+                let tab = if id == 14 { 0x10000 } else { 0 };
+                self.child("EDIT", "00:00:00.000", id + 1, 0x00800000 | tab | 0x80);
             }
-            self.child("BUTTON", &self.t("apply"), APPLY, 0x10000);
+            self.child("BUTTON", &self.t("apply"), APPLY, 0);
             self.child("STATIC", &self.t("status"), 20, 0);
-            self.child(
-                "EDIT",
-                &self.t("ready"),
-                21,
-                0x00800000 | 0x10000 | 0x800 | 0x80,
-            );
+            self.child("EDIT", &self.t("ready"), 21, 0x00800000 | 0x800 | 0x80);
             let menu = CreateMenu();
             for (key, items) in [
                 (
@@ -262,6 +271,7 @@ impl App {
                         ("insert_silence", INSERT_SILENCE),
                         ("crossfade_menu", timeline_tools::CROSSFADE),
                         ("read_selection", READ_SELECTION),
+                        ("edit_selection_menu", EDIT_SELECTION),
                         ("selection_mark_start_menu", MARK_START),
                         ("selection_mark_end_menu", MARK_END),
                     ],
@@ -270,6 +280,7 @@ impl App {
                     "track",
                     vec![
                         ("new_track", ADD_EMPTY),
+                        ("add_named_track", ADD_NAMED),
                         ("rename", RENAME_FOCUS),
                         ("track_levels", LEVELS),
                         ("duplicate_track", DUPLICATE),
@@ -305,6 +316,7 @@ impl App {
                     "tools",
                     vec![
                         ("preferences", PREFERENCES),
+                        ("report_status", REPORT_STATUS),
                         ("calibrate_menu", timeline_tools::CALIBRATE),
                     ],
                 ),
@@ -360,6 +372,7 @@ impl App {
             }
             DrawMenuBar(self.hwnd);
             self.refresh();
+            self.sync_times();
             layout(self.hwnd);
             SetFocus(GetDlgItem(self.hwnd, 11));
         }
@@ -720,7 +733,18 @@ impl App {
                 return;
             }
             if self.timeline_job.is_some()
-                && ![EXIT, HELP, ABOUT, CHANGELOG, LICENSES].contains(&id)
+                && ![
+                    EXIT,
+                    HELP,
+                    ABOUT,
+                    CHANGELOG,
+                    LICENSES,
+                    REPORT,
+                    READ_SELECTION,
+                    REPORT_LEVELS,
+                    REPORT_STATUS,
+                ]
+                .contains(&id)
             {
                 if id == STOP {
                     self.cancel_timeline_job();
@@ -736,7 +760,9 @@ impl App {
                     STOP,
                     PAUSE,
                     REPORT,
+                    READ_SELECTION,
                     REPORT_LEVELS,
+                    REPORT_STATUS,
                     PREFERENCES,
                     HELP,
                     ABOUT,
@@ -770,7 +796,9 @@ impl App {
                 recording_ui::CHECK_MICROPHONE => self.toggle_microphone_check(),
                 COPY | CUT | PASTE | DELETE_AUDIO | SELECT_ALL | SPLIT | TRIM | SILENCE
                 | INSERT_SILENCE | ADD_EMPTY | DUPLICATE | MOVE_UP | MOVE_DOWN | RENAME_FOCUS
-                | MARK_START | MARK_END | CLEAR_SELECTION | READ_SELECTION => self.edit_command(id),
+                | MARK_START | MARK_END | CLEAR_SELECTION | READ_SELECTION | EDIT_SELECTION => {
+                    self.edit_command(id)
+                }
                 IMPORT | OPEN_LINK | PLAY | PAUSE | STOP | START | END | REPORT
                 | LOOP_SELECTION => self.audio_command(id),
                 timeline_tools::ADD_MARKER
@@ -780,6 +808,12 @@ impl App {
                 timeline_tools::CALIBRATE => self.calibrate_command(),
                 timeline_tools::CROSSFADE => self.crossfade_command(),
                 REPORT_LEVELS => self.report_levels(),
+                context_menu::SELECT_CLIP => self.clip_selected(),
+                REPORT_STATUS => {
+                    let status = GetDlgItem(self.hwnd, 21);
+                    SetFocus(status);
+                    SendMessageW(status, 0xb1, 0, -1);
+                }
                 NEW => {
                     if self.can_close() {
                         self.maintenance.clear();
@@ -840,6 +874,13 @@ impl App {
                 }
                 EXIT => {
                     self.close_audio();
+                }
+                ADD_NAMED => {
+                    self.editor.renaming = false;
+                    let name = GetDlgItem(self.hwnd, 13);
+                    SetWindowTextW(name, wide("").as_ptr());
+                    SetFocus(name);
+                    self.timeline_feedback(&self.t("add_named_track_hint"));
                 }
                 ADD => {
                     self.editor.renaming = false;
@@ -940,6 +981,7 @@ impl App {
                             if e > s {
                                 self.editor.bracket_start = None;
                             }
+                            self.update_selection_readout();
                             self.status(&if self.verbose {
                                 format!(
                                     "{} {}. {} {} — {} ({} ms)",
@@ -963,6 +1005,26 @@ impl App {
                             SetFocus(GetDlgItem(self.hwnd, 15));
                         }
                     }
+                }
+                SET_POSITION => {
+                    let Some(position) = parse_time(&self.text(15)) else {
+                        self.error(self.t("invalid_position"));
+                        SetFocus(GetDlgItem(self.hwnd, 15));
+                        return;
+                    };
+                    self.position = position;
+                    self.editor.exact_cursor = None;
+                    self.selection_anchor = None;
+                    SetWindowTextW(
+                        GetDlgItem(self.hwnd, 15),
+                        wide(&format_time(position)).as_ptr(),
+                    );
+                    self.timeline_feedback(&format!(
+                        "{} {}",
+                        self.t("position_short"),
+                        format_time(position)
+                    ));
+                    self.seek_playback();
                 }
                 HELP | ABOUT | CHANGELOG | LICENSES => {
                     let document = match id {
@@ -1052,16 +1114,7 @@ impl App {
                 self.selection_anchor = None;
                 self.selection = (self.position, self.position);
             }
-            for (id, value) in [
-                (15, self.position),
-                (17, self.selection.0),
-                (19, self.selection.1),
-            ] {
-                SetWindowTextW(
-                    GetDlgItem(self.hwnd, id),
-                    wide(&format_time(value)).as_ptr(),
-                );
-            }
+            self.sync_times();
             let position = format!(
                 "{} {}",
                 self.t("position").replace('&', ""),
@@ -1140,7 +1193,7 @@ unsafe fn layout(hwnd: HWND) {
                 (width - 30) / 4,
                 28,
             ),
-            (22, 16, list_h + 120, width, 20),
+            (22, 16, list_h + 120, (width - 10) / 2, 20),
             (
                 recording_ui::RECORD as i32,
                 46 + 3 * (width - 30) / 4,
@@ -1148,7 +1201,21 @@ unsafe fn layout(hwnd: HWND) {
                 (width - 30) / 4,
                 28,
             ),
-            (23, 16, list_h + 142, width, 26),
+            (23, 16, list_h + 142, (width - 10) / 2, 26),
+            (
+                26,
+                26 + (width - 10) / 2,
+                list_h + 120,
+                (width - 10) / 2,
+                20,
+            ),
+            (
+                SELECTION_READOUT,
+                26 + (width - 10) / 2,
+                list_h + 142,
+                (width - 10) / 2,
+                26,
+            ),
             (14, 16, list_h + 180, 275, 22),
             (15, 310, list_h + 180, width - 294, 26),
             (16, 16, list_h + 214, 275, 22),
@@ -1187,6 +1254,16 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: usize, l: isize) -> isize {
         let ptr = GetWindowLongPtrW(h, -21) as *mut App;
         if !ptr.is_null() {
             match m {
+                0x007b if l as u32 == u32::MAX && !(*ptr).modal.get() => {
+                    let control = if w == h as usize {
+                        GetFocus()
+                    } else {
+                        w as HWND
+                    };
+                    if (*ptr).show_context_menu(control) {
+                        return 0;
+                    }
+                }
                 0x113 if w == playback::TIMER => {
                     if !(*ptr).modal.get() {
                         (*ptr).poll_audio();
@@ -1371,6 +1448,7 @@ pub fn run() {
             );
         }
         let mut msg = MSG::default();
+        let mut context_key = None;
         loop {
             let result = GetMessageW(&mut msg, null_mut(), 0, 0);
             if result <= 0 {
@@ -1434,11 +1512,23 @@ pub fn run() {
                 app.command(command);
                 continue;
             }
+            if [0x101, 0x105].contains(&msg.message) && context_key == Some(msg.wParam) {
+                context_key = None;
+                continue;
+            }
             if [0x100, 0x104].contains(&msg.message) {
                 let ctrl = GetKeyState(0x11) < 0;
                 let shift = GetKeyState(0x10) < 0;
                 let alt = GetKeyState(0x12) < 0;
                 let focus = GetFocus();
+                if context_key == Some(msg.wParam) {
+                    context_key = None;
+                }
+                if context_menu::opens(msg.wParam, ctrl, shift, alt) && app.show_context_menu(focus)
+                {
+                    context_key = Some(msg.wParam);
+                    continue;
+                }
                 if msg.wParam == 0x1b && !ctrl && !shift && !alt && app.cancel_timeline_job() {
                     continue;
                 }
@@ -1465,19 +1555,38 @@ pub fn run() {
                     app.clip_selected();
                     continue;
                 }
-                if app.editor.renaming
-                    && focus == GetDlgItem(app.hwnd, 13)
+                if focus == GetDlgItem(app.hwnd, 13)
                     && !ctrl
+                    && !shift
                     && !alt
                     && [0x0d, 0x1b].contains(&msg.wParam)
                 {
                     if msg.wParam == 0x0d {
-                        app.command(RENAME);
+                        app.command(if app.editor.renaming { RENAME } else { ADD });
                     } else {
                         app.editor.renaming = false;
                         SetFocus(GetDlgItem(app.hwnd, 11));
                     }
                     continue;
+                }
+                if !ctrl && !shift && !alt {
+                    if focus == GetDlgItem(app.hwnd, SELECTION_READOUT) {
+                        match msg.wParam {
+                            0x0d => {
+                                app.command(EDIT_SELECTION);
+                                continue;
+                            }
+                            0x1b => {
+                                app.leave_selection_readout();
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                    if focus == GetDlgItem(app.hwnd, 15) && msg.wParam == 0x0d {
+                        app.command(SET_POSITION);
+                        continue;
+                    }
                 }
                 if focus == GetDlgItem(app.hwnd, 23) && msg.wParam == 0x20 && !shift && !alt {
                     if ctrl {
@@ -1767,6 +1876,7 @@ mod tests {
                 21,
                 23,
                 25,
+                SELECTION_READOUT,
                 ADD as i32,
                 APPLY as i32,
                 PLAY as i32,
@@ -1779,6 +1889,16 @@ mod tests {
                     !name.is_empty(),
                     "missing native accessible name for control {id}"
                 );
+            }
+            let tab_ids = [11, 25, 15];
+            for (index, id) in tab_ids.into_iter().enumerate() {
+                let control = GetDlgItem(app.hwnd, id);
+                for (reverse, offset) in [(0, 1), (1, 2)] {
+                    assert_eq!(
+                        GetNextDlgTabItem(app.hwnd, control, reverse),
+                        GetDlgItem(app.hwnd, tab_ids[(index + offset) % tab_ids.len()])
+                    );
+                }
             }
             SetWindowTextW(GetDlgItem(app.hwnd, 13), wide("Vocals ñ").as_ptr());
             app.command(ADD);
@@ -1831,6 +1951,12 @@ mod tests {
             assert_eq!(prefs["general"]["language"], "es");
             app.command(APPLY);
             assert_eq!(app.position, 88500);
+            SetWindowTextW(GetDlgItem(app.hwnd, 15), wide("00:01:28.750").as_ptr());
+            app.command(SET_POSITION);
+            assert_eq!(app.selection, (0, 0));
+            assert_eq!(app.position, 88750);
+            SetWindowTextW(GetDlgItem(app.hwnd, 15), wide("00:01:28.500").as_ptr());
+            app.command(SET_POSITION);
             app.move_cursor(true, false, true);
             assert_eq!(app.selection, (88500, 88510));
             app.move_cursor(false, true, true);

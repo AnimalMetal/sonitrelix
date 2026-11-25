@@ -6,7 +6,7 @@
 2. Press **Ctrl+I** to import audio. Each import opens in its own track. See [FFmpeg formats and effects](FFMPEG.md) for compressed formats.
 3. From Tracks or Clips, **Space** plays or stops the audible project mix. **Ctrl+Space** pauses or resumes. Selecting another track leaves the mix playing. **M** and **S** change mute and solo during playback. In Tracks, **Alt+Up/Down** and **Alt+Left/Right** change the selected track's volume and pan.
 4. **F6** focuses the transport snapshot. Its time stops updating while it has focus so you can read it. Press F6 again to refresh. **F8** announces peak level and clipping without moving focus.
-5. Use the arrows and configured steps for cursor movement. Enter an exact time such as `00:00:05.250` in **Position**, then choose **Apply times**. An active stream seeks to that position. Ctrl+A/C/X/V and Space retain their normal behavior in text fields.
+5. Use the arrows and configured steps for cursor movement. Enter an exact time such as `00:00:05.250` in **Position**, then press **Enter**. An active stream seeks to that position. Ctrl+A/C/X/V and Space retain their normal behavior in text fields.
 6. Save with **Ctrl+S** and reopen with **Ctrl+O**. Keep the referenced assets in place.
 
 Changing output or buffer settings stops playback. The next Play opens the selected output. A missing named endpoint produces an error. Select another output or reconnect the device and try Play again.

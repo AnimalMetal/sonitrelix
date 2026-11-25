@@ -120,6 +120,42 @@ fn configured<'a>(
         .filter(|s| chord(s).is_some())
         .unwrap_or(default)
 }
+
+pub(super) fn menu_label(app: &App, key: &str, command: usize) -> String {
+    let label = app.t(key);
+    let Some((id, _, standard, _)) = commands()
+        .into_iter()
+        .find(|(_, _, _, action)| *action == Action::Command(command))
+    else {
+        return label;
+    };
+    let binding = configured(&app.store.settings, id, standard);
+    if binding == standard {
+        return label;
+    }
+    let title = label.split('\t').next().unwrap_or(&label);
+    let binding = binding.to_ascii_uppercase();
+    let binding = binding
+        .split('+')
+        .map(|part| match (app.es, part.trim()) {
+            (true, "SHIFT") => "Mayús",
+            (true, "DELETE") => "Supr",
+            (true, "UP") => "Arriba",
+            (true, "DOWN") => "Abajo",
+            (true, "SPACE") => "Espacio",
+            (_, "SHIFT") => "Shift",
+            (_, "CTRL") => "Ctrl",
+            (_, "ALT") => "Alt",
+            (_, "DELETE") => "Delete",
+            (_, "UP") => "Up",
+            (_, "DOWN") => "Down",
+            (_, "SPACE") => "Space",
+            (_, name) => name,
+        })
+        .collect::<Vec<_>>()
+        .join("+");
+    format!("{title}\t{binding}")
+}
 fn fixed_timeline_shortcut(action: Option<Action>) -> bool {
     matches!(
         action,
@@ -171,7 +207,9 @@ fn valid_assignment(settings: &sonitrelix_settings::Settings, id: &str, text: &s
     let Some(c) = chord(text) else {
         return false;
     };
-    if shortcuts::route(c.key, c.ctrl, c.shift, c.alt, Scope::Other).is_some() {
+    if context_menu::opens(c.key, c.ctrl, c.shift, c.alt)
+        || shortcuts::route(c.key, c.ctrl, c.shift, c.alt, Scope::Other).is_some()
+    {
         return false;
     }
     let surface = shortcuts::route(c.key, c.ctrl, c.shift, c.alt, Scope::Surface);
@@ -273,6 +311,10 @@ mod tests {
         assert!(!valid_assignment(&s, "record", "Ctrl+C"));
         assert!(!valid_assignment(&s, "copy", "Ctrl+S"));
         assert!(!valid_assignment(&s, "record", "F1"));
+        assert!(!valid_assignment(&s, "record", "Shift+F10"));
+        assert!(context_menu::opens(0x5d, false, false, false));
+        assert!(context_menu::opens(0x79, false, true, false));
+        assert!(!context_menu::opens(0x79, false, false, false));
         assert!(valid_assignment(&s, "record", "Ctrl+Shift+K"));
         s.extra.insert(
             "shortcuts".into(),

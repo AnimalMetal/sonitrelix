@@ -87,6 +87,9 @@ pub(super) fn route(
             }
         }
     }
+    if !ctrl && shift && key == 0x75 {
+        return Some(Command(REPORT_STATUS));
+    }
     if !ctrl && !shift {
         match key {
             0x70 => return Some(Command(HELP)),

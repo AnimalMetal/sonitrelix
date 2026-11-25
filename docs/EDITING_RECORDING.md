@@ -5,7 +5,7 @@ Sonitrelix edits audio without rewriting source files. It can record a single tr
 ## Keyboard editing
 
 1. Import audio with **Ctrl+I**. Move to Tracks or Clips and choose the track. **Space** plays the project mix.
-2. Enter numeric times and **Apply times**, or use **[** and **]** for a range. **F7** reports the selection. **Ctrl+A** selects the whole selected track. **Ctrl+C/X/V** copy, cut or paste audio from Tracks or Clips.
+2. Press **F7** to read the selection and **Enter** to set exact start and end times, or use **[** and **]** to mark the range from Tracks or Clips. **Ctrl+A** selects the whole selected track. **Ctrl+C/X/V** copy, cut or paste audio from Tracks or Clips.
 3. To paste at an exact time on an empty track, enter the time in **Position** and apply it. Return to Tracks, clear any selection with **Escape**, then paste. Sonitrelix fills the gap with silence. On a track that has audio, pasting at the cursor shifts later clips on that track. An active range is replaced.
 4. **Ctrl+T** splits at the cursor. **Enter** in Clips selects the focused clip. **Ctrl+Shift+T** trims to the selection. **Ctrl+L** silences the range and **Ctrl+Shift+I** inserts silence.
 5. **Ctrl+Z/Y** undo and redo. Save and reopen to verify the arrangement. Keep referenced audio with the project. Older supported projects migrate to [schema version 6](PROJECT_FORMAT.md) when saved.

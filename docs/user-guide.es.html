@@ -81,7 +81,8 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <p>En el navegador, use los enlaces del contenido o las teclas de encabezados y tablas de su lector en modo exploración. Ctrl+F busca texto. Alt+Tab vuelve a Sonitrelix.</p>
 <h3 id="window">Comprender pistas, fragmentos y foco</h3>
 <dl><dt>Proyecto</dt><dd>La organización guardada de pistas y referencias a su audio.</dd><dt>Pista</dt><dd>Una secuencia de fragmentos y silencios con nombre, silencio, solo, armado, volumen y panorama.</dd><dt>Fragmento</dt><dd>Una región que hace referencia a parte de un archivo, o una región de silencio.</dd><dt>Cursor</dt><dd>El punto donde comienza la reproducción o una edición.</dd><dt>Selección</dt><dd>Un inicio y un final que delimitan el audio que desea editar.</dd></dl>
-<p>La ventana contiene menús, controles de transporte, listas Pistas y Fragmentos, campos de tiempo editables y lecturas de estado. Arriba/Abajo elige un elemento de la lista. La mayoría de los atajos de audio exige el foco en <strong>Pistas o Fragmentos</strong>. En un campo de texto, Ctrl+A/C/X/V edita texto.</p>
+<p>En la ventana principal, Tab recorre <strong>Pistas, Fragmentos y Posición</strong>. Mayús+Tab retrocede. Arriba y Abajo eligen un elemento de la lista. Use los menús para otros comandos, o pulse F6 para consultar el transporte, F7 para consultar la selección y F8 para oír los niveles de audio. La mayoría de los atajos de audio funcionan con el foco en Pistas o Fragmentos. En un campo de texto, Ctrl+A/C/X/V edita texto.</p>
+<p>Pulse la <kbd>tecla Aplicaciones</kbd> o <kbd>Mayús+F10</kbd> en Pistas, Fragmentos o Posición para abrir su menú contextual. Use Arriba y Abajo para recorrerlo, Intro para elegir o Escape para volver al mismo control. En Fragmentos, Cortar y Copiar usan la selección de audio actual. Elija Seleccionar todo el fragmento para marcar primero el fragmento enfocado.</p>
 <h3 id="devices">Elegir micrófono y auriculares</h3>
 <ol><li>Pulse Ctrl+, para abrir Herramientas &gt; Preferencias.</li><li>Use Ctrl+Tab hasta <strong>Dispositivos de audio</strong>.</li><li>Elija entrada y salida por separado. Actualice la lista después de conectar un dispositivo.</li><li>En <strong>Grabación / reproducción</strong>, elija canales y búfer. Haga coincidir mono/estéreo con una pista existente donde vaya a grabar.</li><li>Aplicar guarda sin cerrar; Aceptar guarda y cierra; Cancelar descarta lo que aún no haya aplicado.</li></ol>
 <p>Use auriculares para grabar sobre música. Puede oír el acompañamiento durante la grabación. Para oír también el micrófono, active Monitorizar el micrófono al grabar en Grabación / reproducción. La opción viene desactivada y no cambia el nivel grabado.</p>
@@ -97,8 +98,8 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 
 <section aria-labelledby="editing"><h2 id="editing">2. Principiante: editar y guardar audio</h2>
 <h3 id="time-selection">Introducir posición y selección exactas</h3>
-<p>El formato es <code>horas:minutos:segundos.milisegundos</code>. Por ejemplo, <code>00:01:15.000</code> representa 1 minuto y 15 segundos. Elija la pista, recorra con Tab los campos Posición o inicio/final de selección, escriba los valores y active <strong>Aplicar tiempos</strong>.</p>
-<p>Para seleccionar desde 1 minuto 15 segundos hasta 1 minuto 28,5 segundos, introduzca <code>00:01:15.000</code> y <code>00:01:28.500</code>. F7 enfoca la lectura de selección. Vuelva a Pistas/Fragmentos antes de usar atajos de edición de audio.</p>
+<p>El formato es <code>horas:minutos:segundos.milisegundos</code>. Para mover el cursor, llegue con Tab a <strong>Posición</strong>, escriba un tiempo como <code>00:01:15.000</code> y pulse Intro.</p>
+<p>Para fijar un intervalo exacto, pulse <kbd>F7</kbd> para leer la selección y <kbd>Intro</kbd> para abrir <strong>Fijar tiempos de selección</strong>. Por ejemplo, introduzca <code>00:01:15.000</code> como inicio y <code>00:01:28.500</code> como final, y pulse Aplicar. Escape en la lectura devuelve el foco al control anterior. El menú Editar también abre este diálogo.</p>
 <p>También puede mover el cursor con Izquierda/Derecha; Mayús amplía la selección y Ctrl usa el paso grande. Los pasos se configuran en Preferencias. Intro en Fragmentos selecciona el fragmento completo con límites exactos de muestras. Escape en Pistas/Fragmentos quita la selección.</p>
 <p>Con el foco en Pistas o Fragmentos, pulse <kbd>[</kbd> en el inicio. Avance o deje reproducir hasta el final y pulse <kbd>]</kbd>. Durante la reproducción se usa la posición de escucha. Pulse F7 para consultar el intervalo y vuelva a Pistas o Fragmentos. Ctrl+E abre Efectos para el intervalo, Supr lo elimina y Ctrl+Mayús+X lo exporta.</p>
 <h3 id="cut-copy">Copiar, cortar, pegar y eliminar</h3>
@@ -206,9 +207,12 @@ footer { margin-block-start: 3rem; border-block-start: 1px solid #c6d0dd; paddin
 <tr><th scope="row" data-key="F11">F11</th><td>Ir al marcador siguiente y anunciar nombre y tiempo.</td></tr>
 <tr><th scope="row" data-key="Ctrl+M">Ctrl+M</th><td>Añadir un marcador con nombre en el cursor desde Pistas o Fragmentos.</td></tr>
 <tr><th scope="row" data-key="F6">F6</th><td>Enfocar lectura de transporte.</td></tr>
-<tr><th scope="row" data-key="F7">F7</th><td>Enfocar lectura de selección.</td></tr>
+<tr><th scope="row" data-key="Shift+F6">Mayús+F6</th><td>Leer el último mensaje de estado.</td></tr>
+<tr><th scope="row" data-key="F7">F7</th><td>Enfocar la lectura de selección. Intro edita los tiempos. Escape devuelve el foco al control de edición anterior.</td></tr>
 <tr><th scope="row" data-key="F8">F8</th><td>Anunciar picos de entrada y reproducción y si hubo saturación.</td></tr>
-<tr><th scope="row">Tab / Mayús+Tab</th><td>Control siguiente / anterior.</td></tr>
+<tr><th scope="row">Tab / Mayús+Tab</th><td>Recorrer Pistas, Fragmentos y Posición en la ventana principal.</td></tr>
+<tr><th scope="row" data-key="Application key / Shift+F10">Tecla Aplicaciones / Mayús+F10</th><td>Abrir el menú contextual de Pistas, Fragmentos o Posición.</td></tr>
+<tr><th scope="row">Intro en Posición</th><td>Ir al tiempo escrito.</td></tr>
 <tr><th scope="row">Arriba / Abajo</th><td>Elegir pista o fragmento en la lista enfocada.</td></tr>
 <tr><th scope="row">Alt+F4</th><td>Cerrar ventana con el comando estándar de Windows; solicita guardar si procede.</td></tr>
 </tbody></table>

@@ -28,6 +28,7 @@ struct Form {
     slider_access: Option<slider::AccessibleValues>,
     result: Option<Vec<String>>,
     export: Option<super::export_ui::OptionsDialog>,
+    accept_key: &'static str,
 }
 impl Form {
     fn t(&self, k: &str) -> String {
@@ -370,11 +371,7 @@ unsafe fn create_dialog(
         create(
             1,
             "BUTTON",
-            &form.t(if form.export.is_some() {
-                "export_continue"
-            } else {
-                "form_ok"
-            }),
+            &form.t(form.accept_key),
             0x10000 | 1,
             124 + count * row,
             30,
@@ -403,7 +400,21 @@ pub(super) unsafe fn ask(
     fields: Vec<Field>,
     hint: &str,
 ) -> Result<Option<Vec<String>>, String> {
-    unsafe { run_dialog(owner, strings, title, fields, hint, None).map(|form| form.result) }
+    unsafe {
+        run_dialog(owner, strings, title, fields, hint, None, "form_ok").map(|form| form.result)
+    }
+}
+
+pub(super) unsafe fn ask_apply(
+    owner: HWND,
+    strings: serde_json::Value,
+    title: &str,
+    fields: Vec<Field>,
+    hint: &str,
+) -> Result<Option<Vec<String>>, String> {
+    unsafe {
+        run_dialog(owner, strings, title, fields, hint, None, "pref_apply").map(|form| form.result)
+    }
 }
 
 pub(super) unsafe fn ask_export(
@@ -414,7 +425,15 @@ pub(super) unsafe fn ask_export(
     export: export_ui::OptionsDialog,
 ) -> Result<Option<(Vec<String>, export_ui::OptionsDialog)>, String> {
     unsafe {
-        let form = run_dialog(owner, strings, title, fields, "", Some(export))?;
+        let form = run_dialog(
+            owner,
+            strings,
+            title,
+            fields,
+            "",
+            Some(export),
+            "export_continue",
+        )?;
         Ok(form.result.zip(form.export))
     }
 }
@@ -426,6 +445,7 @@ unsafe fn run_dialog(
     fields: Vec<Field>,
     hint: &str,
     export: Option<export_ui::OptionsDialog>,
+    accept_key: &'static str,
 ) -> Result<Form, String> {
     unsafe {
         let has_numbers = fields
@@ -440,6 +460,7 @@ unsafe fn run_dialog(
             slider_access: has_numbers.then(slider::AccessibleValues::new),
             result: None,
             export,
+            accept_key,
         });
         let h = create_dialog(owner, &mut form, title, hint)?;
         form.configure_export(h);
@@ -639,6 +660,7 @@ mod tests {
                         selection_only: false,
                         project_rate: 48_000,
                     }),
+                    accept_key: "export_continue",
                 });
                 let h = create_dialog(null_mut(), &mut form, "Export", "").unwrap();
                 let format = GetDlgItem(h, 101);
@@ -699,6 +721,7 @@ mod tests {
                 slider_access: Some(slider::AccessibleValues::new()),
                 result: None,
                 export: None,
+                accept_key: "form_ok",
             });
             let h = create_dialog(null_mut(), &mut form, "Volume and pan", "").unwrap();
             let volume = GetDlgItem(h, 101);
